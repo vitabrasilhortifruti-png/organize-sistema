@@ -1,0 +1,17 @@
+{
+  "name": "organize-server",
+  "version": "1.0.0",
+  "description": "Organize Consultoria - Backend com SQLite",
+  "main": "servidor.js",
+  "scripts": {
+    "start": "node servidor.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
+  }
+}
