@@ -940,26 +940,59 @@ async function delEntrada(id) {
 // ═══════════════════════════════════════════════════════
 // PEDIDOS
 // ═══════════════════════════════════════════════════════
+
+// ── BANCA / CALIBRE LOGIC ────────────────────────────────
+var FRUTAS_BANCA = ['LARANJA','LIMA TAITI','MEXERICA POKAN'];
+var CALIBRES_LISTA = ['2A','2B','3A','3B','4A','4B'];
+var BANCAS_LISTA = ['BANCA 1','BANCA 2','BANCA 3','BANCA 4','BANCA 5','BANCA 6','INDUSTRIA'];
+
+function atualizarBancasCalibres() {
+  var fruta = document.getElementById('ped-fruta').value;
+  var usaBanca = FRUTAS_BANCA.indexOf(fruta) !== -1;
+  var label = document.getElementById('bancas-label');
+  var chkGrid = document.getElementById('bancas-chk');
+  if(!label || !chkGrid) return;
+
+  if(usaBanca) {
+    label.textContent = 'Bancas de Destino';
+    chkGrid.innerHTML = BANCAS_LISTA.map(function(b){
+      return '<label class="chk-lbl"><input type="checkbox" value="'+b+'" class="banca-cb"> '+b+'</label>';
+    }).join('');
+  } else if(fruta) {
+    label.textContent = 'Calibre';
+    chkGrid.innerHTML = CALIBRES_LISTA.map(function(c){
+      return '<label class="chk-lbl"><input type="checkbox" value="'+c+'" class="banca-cb"> '+c+'</label>';
+    }).join('');
+  } else {
+    label.textContent = 'Bancas / Calibre';
+    chkGrid.innerHTML = BANCAS_LISTA.map(function(b){
+      return '<label class="chk-lbl"><input type="checkbox" value="'+b+'" class="banca-cb"> '+b+'</label>';
+    }).join('');
+  }
+}
+
 function renderPedidos() {
   document.getElementById('content').innerHTML=`
   <div class="card" style="margin-bottom:16px;">
     <div class="section-title"><i data-lucide="plus" style="width:16px;height:16px;"></i> Novo Pedido</div>
     <div class="frow">
       <div><label class="lbl">Cliente *</label><select class="inp" id="ped-cli"><option value="">Selecione</option>${DB.clientes.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')}</select></div>
-      <div><label class="lbl">Fruta *</label><select class="inp" id="ped-fruta" ><option value="">Selecione</option>${FRUTAS.map(f=>`<option>${f}</option>`).join('')}</select></div>
+      <div><label class="lbl">Fruta *</label><select class="inp" id="ped-fruta" onchange="atualizarBancasCalibres()"><option value="">Selecione</option>${FRUTAS.map(f=>`<option>${f}</option>`).join('')}</select></div>
       <div><label class="lbl">Mercadoria *</label><select class="inp" id="ped-merc" ><option value="">Selecione</option>${DB.produtos.map(p=>`<option value="${p.id}" data-peso="${p.peso}">${p.codigo} - ${p.nome}</option>`).join('')}</select></div>
       <div><label class="lbl">Data Pedido *</label><input class="inp" id="ped-data-ped" type="date" value="${today()}"></div>
       <div><label class="lbl">Data Entrega *</label><input class="inp" id="ped-data-ent" type="date" value="${tomorrow()}"></div>
       <div><label class="lbl">Quantidade *</label><input class="inp" id="ped-qtd" type="number" step="1" placeholder="0" oninput="atualizarLotesPed()"></div>
       <div><label class="lbl">Valor unit. (R$)</label><input class="inp" id="ped-valor" type="number" step="0.01" placeholder="0,00"></div>
     </div>
-    <div style="margin-bottom:12px;"><label class="lbl">Bancas de Destino</label>
+    <div style="margin-bottom:12px;" id="bancas-section">
+      <label class="lbl" id="bancas-label">Bancas de Destino</label>
       <div class="chk-grid" id="bancas-chk">
         ${['BANCA 1','BANCA 2','BANCA 3','BANCA 4','BANCA 5','BANCA 6','INDUSTRIA'].map(b=>`<label class="chk-lbl"><input type="checkbox" value="${b}" class="banca-cb"> ${b}</label>`).join('')}
       </div>
     </div>
     <div style="margin-bottom:10px;padding:10px;background:rgba(249,115,22,.07);border-radius:8px;font-size:12px;color:var(--accent);">
-      ℹ️ A seleção de lotes é feita pela <strong>Produção</strong> na hora de atender o pedido.
+      ℹ️ A seleção de lotes é feita pela <strong>Produção</strong> na hora de atender o pedido.<br>
+      <span style="font-size:11px;color:var(--sub);">🍊 Laranja, Limão e Mexerica = <strong>Banca</strong> &nbsp;|&nbsp; Demais frutas = <strong>Calibre</strong> (2A, 2B, 3A, 3B, 4A, 4B)</span>
     </div>
     <div style="margin-bottom:10px;"><label class="lbl">Observações</label><input class="inp" id="ped-obs" placeholder="Observações"></div>
 
@@ -1046,6 +1079,7 @@ async function modalAtenderPedido(id) {
   if(!p) return;
   var lotes = DB.entradas.filter(function(e){return (e.quantidade_atual!=null?e.quantidade_atual:e.quantidade)>0;});
   
+  window._atenderPedidoId = id;
   var lotesHTML = '';
   if(lotes.length===0) {
     lotesHTML = '<div class="empty">Nenhum lote disponível em estoque</div>';
@@ -1053,20 +1087,26 @@ async function modalAtenderPedido(id) {
     lotes.forEach(function(l) {
       var saldo = l.quantidade_atual!=null ? l.quantidade_atual : l.quantidade;
       lotesHTML += '<div style="display:flex;align-items:center;gap:10px;padding:8px;background:#0d1320;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">'
-        + '<input type="checkbox" class="lat-cb" value="'+l.id+'" data-lote="'+l.lote+'" data-peso="'+(l.peso_unitario||1)+'" data-saldo="'+saldo+'" style="accent-color:var(--accent);width:15px;height:15px;">'
+        + '<input type="checkbox" class="lat-cb" value="'+l.id+'" data-lote="'+l.lote+'" data-peso="'+(l.peso_unitario||1)+'" data-saldo="'+saldo+'" style="accent-color:var(--accent);width:15px;height:15px;" onchange="autoFillQtdLote(this)">'
         + '<div style="flex:1;">'
         + '<div style="font-size:12px;font-weight:700;color:var(--text)">'+l.lote+' — '+l.fruta+'</div>'
         + '<div style="font-size:10px;color:var(--muted)">Saldo: '+saldo+' unid. | '+(saldo*(l.peso_unitario||1)).toFixed(1)+' kg</div>'
         + '</div>'
         + '<div><label style="font-size:10px;color:var(--sub);">Qtd usada:</label>'
-        + '<input type="number" class="inp lat-qtd" data-id="'+l.id+'" min="1" max="'+saldo+'" placeholder="0" style="width:70px;padding:4px 6px;font-size:11px;"></div>'
+        + '<input type="number" class="inp lat-qtd" data-id="'+l.id+'" min="1" max="'+saldo+'" placeholder="0" style="width:70px;padding:4px 6px;font-size:11px;" oninput="atualizarResumoAtender()"></div>'
         + '</div>';
     });
   }
 
+  var pedBancas = p.bancas ? ' · Destino: '+p.bancas : '';
   modal('<div class="section-title"><i data-lucide="check-circle" style="width:16px;height:16px;color:var(--green);"></i> Atender Pedido — '+p.cliente_nome+'</div>'
-    + '<div style="margin-bottom:12px;font-size:12px;color:var(--sub);"><strong style="color:var(--text)">'+p.fruta+'</strong> · '+p.quantidade+' unidades · '+(p.quantidade_kg||0).toFixed(1)+' kg · Bancas: '+p.bancas+'</div>'
-    + '<div style="margin-bottom:8px;"><label class="lbl">Selecione os lotes usados:</label></div>'
+    + '<div style="margin-bottom:8px;padding:10px;background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.2);border-radius:8px;font-size:12px;">'
+    + '<strong style="color:var(--text)">'+p.fruta+'</strong>'
+    + ' &nbsp;|&nbsp; <span style="color:var(--accent)">'+p.quantidade+' unidades</span>'
+    + ' &nbsp;|&nbsp; '+(p.quantidade_kg||0).toFixed(1)+' kg'
+    + pedBancas
+    + '</div>'
+    + '<div style="margin-bottom:6px;"><label class="lbl">Selecione os lotes e informe a quantidade usada (campo já preenchido com o total do pedido):</label></div>'
     + '<div id="lotes-atender" style="max-height:280px;overflow-y:auto;margin-bottom:12px;">'+lotesHTML+'</div>'
     + '<div id="lat-resumo" style="padding:10px;background:#060a12;border-radius:8px;font-size:12px;color:var(--sub);margin-bottom:14px;">Selecione os lotes acima</div>'
     + '<div style="display:flex;gap:8px;">'
@@ -1079,6 +1119,32 @@ async function modalAtenderPedido(id) {
     el.addEventListener('input', atualizarResumoAtender);
   });
   lucide.createIcons();
+}
+
+function autoFillQtdLote(cb) {
+  if(cb.checked) {
+    var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
+    if(qtdEl && (!qtdEl.value || qtdEl.value === '0')) {
+      // Get remaining needed quantity
+      var p = DB.pedidos.find(function(x){return x.id===window._atenderPedidoId;});
+      if(p) {
+        // How much already allocated to other checked lotes
+        var jaAlocado = 0;
+        document.querySelectorAll('.lat-cb:checked').forEach(function(otherCb) {
+          if(otherCb.value !== cb.value) {
+            var oEl = document.querySelector('.lat-qtd[data-id="'+otherCb.value+'"]');
+            jaAlocado += parseInt(oEl ? oEl.value : 0) || 0;
+          }
+        });
+        var restante = Math.max(0, p.quantidade - jaAlocado);
+        var saldo = parseInt(cb.dataset.saldo) || 0;
+        qtdEl.value = Math.min(restante, saldo);
+      }
+    }
+    atualizarResumoAtender();
+  } else {
+    atualizarResumoAtender();
+  }
 }
 
 function atualizarResumoAtender() {
@@ -1757,6 +1823,20 @@ function limparForm(ids) {
 }
 
 var itemExtraCount = 0;
+
+function atualizarBancaItem(sel) {
+  var fruta = sel.value;
+  var usaBanca = FRUTAS_BANCA.indexOf(fruta) !== -1;
+  var container = sel.closest('div').parentElement;
+  var bancaSel = container.querySelector('.item-banca');
+  var bancaLabel = container.querySelector('.item-banca-label');
+  if(!bancaSel) return;
+  var opcoes = usaBanca ? BANCAS_LISTA : (fruta ? CALIBRES_LISTA : BANCAS_LISTA);
+  var labelTxt = usaBanca ? 'Bancas' : (fruta ? 'Calibre' : 'Bancas');
+  if(bancaLabel) bancaLabel.textContent = labelTxt;
+  bancaSel.innerHTML = opcoes.map(function(o){return '<option>'+o+'</option>';}).join('');
+}
+
 function removerItemExtra(n) {
   var el = document.getElementById('item-extra-' + n);
   if(el) el.remove();
@@ -1770,14 +1850,17 @@ function addItemExtra() {
   var frutas = ['LARANJA','PERA','LIMA TAITI','ABACATE','REPOLHO','CENOURA','MEXERICA POKAN'];
   var frutaOpts = frutas.map(function(f){ return '<option>'+f+'</option>'; }).join('');
   var mercOpts = DB.produtos.map(function(p){ return '<option value="'+p.id+'" data-peso="'+p.peso+'">'+p.nome+'</option>'; }).join('');
+  var bancaOpts = BANCAS_LISTA.map(function(b){return '<option>'+b+'</option>';}).join('');
   div.innerHTML = '<div style="display:flex;justify-content:space-between;margin-bottom:8px;">'
     + '<span style="font-size:11px;font-weight:700;color:var(--accent);">Item Extra '+n+'</span>'
     + '<button class="btn btn-r btn-sm" onclick="removerItemExtra('+n+')">✕ Remover</button>'
     + '</div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">'
-    + '<div><label class="lbl">Fruta</label><select class="inp item-fruta">'+frutaOpts+'</select></div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">'
+    + '<div><label class="lbl">Fruta</label><select class="inp item-fruta" onchange="atualizarBancaItem(this)">'+frutaOpts+'</select></div>'
     + '<div><label class="lbl">Mercadoria</label><select class="inp item-merc">'+mercOpts+'</select></div>'
     + '<div><label class="lbl">Quantidade</label><input type="number" class="inp item-qtd" placeholder="0" min="1"></div>'
+    + '<div><label class="lbl item-banca-label">Bancas</label>'
+    + '<select class="inp item-banca" multiple style="height:60px;font-size:10px;">'+bancaOpts+'</select></div>'
     + '</div>';
   document.getElementById('itens-extras').appendChild(div);
 }
