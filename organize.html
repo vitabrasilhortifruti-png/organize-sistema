@@ -1033,9 +1033,14 @@ async function confirmarAtenderPedido(id) {
 async function modalEditarPedido(id) {
   var p = DB.pedidos.find(function(x){return x.id===id;});
   if(!p) return;
-  var cliOpts = DB.clientes.map(function(c){return '<option value="'+c.id+'"'+(c.id===p.cliente_id?' selected':'')+'>'+c.nome+'</option>';}).join('');
-  var frutaOpts = ['LARANJA','PERA','LIMA TAITI','ABACATE','REPOLHO','CENOURA','MEXERICA POKAN'].map(function(f){return '<option'+(f===p.fruta?' selected':'')+'>'+f+'</option>';}).join('');
-  modal('<div class="section-title"><i data-lucide="edit-2" style="width:16px;height:16px;"></i> Editar Pedido</div>'
+  window._editPedidoId = id;
+  var cliOpts = DB.clientes.map(function(c){
+    return '<option value="'+c.id+'"'+(c.id===p.cliente_id?' selected':'')+'>'+c.nome+'</option>';
+  }).join('');
+  var frutaOpts = ['LARANJA','PERA','LIMA TAITI','ABACATE','REPOLHO','CENOURA','MEXERICA POKAN'].map(function(f){
+    return '<option'+(f===p.fruta?' selected':'')+'>'+f+'</option>';
+  }).join('');
+  var html = '<div class="section-title">✏️ Editar Pedido</div>'
     + '<div class="frow" style="margin-bottom:10px;">'
     + '<div><label class="lbl">Cliente</label><select class="inp" id="ep-cli">'+cliOpts+'</select></div>'
     + '<div><label class="lbl">Fruta</label><select class="inp" id="ep-fruta">'+frutaOpts+'</select></div>'
@@ -1047,13 +1052,16 @@ async function modalEditarPedido(id) {
     + '<div style="margin-bottom:10px;"><label class="lbl">Bancas</label><input class="inp" id="ep-bancas" value="'+(p.bancas||'')+'"></div>'
     + '<div style="margin-bottom:14px;"><label class="lbl">Observações</label><input class="inp" id="ep-obs" value="'+(p.obs||'')+'"></div>'
     + '<div style="display:flex;gap:8px;">'
-    + '<button class="btn btn-p" onclick="salvarEdicaoPedido(&quot;\'+p.id+\'&quot;)">&#128190; Salvar</button>'
+    + '<button class="btn btn-p" onclick="salvarEdicaoPedido()">💾 Salvar Alterações</button>'
     + '<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
-    + '</div>');
-  lucide.createIcons();
+    + '</div>';
+  modal(html);
 }
 
-async function salvarEdicaoPedido(id) {
+
+async function salvarEdicaoPedido() {
+  var id = window._editPedidoId;
+  if(!id) return toast('Erro: ID não encontrado','err');
   var p = DB.pedidos.find(function(x){return x.id===id;});
   if(!p) return;
   var cliEl = document.getElementById('ep-cli');
