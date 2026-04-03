@@ -554,7 +554,7 @@ function renderEmpresa() {
       <div><label class="lbl">Email</label><input class="inp" id="e-email" value="${e.email||''}" placeholder="contato@empresa.com"></div>
     </div>
     <div style="margin-bottom:14px;"><label class="lbl">Endereço</label><input class="inp" id="e-end" value="${e.endereco||''}" placeholder="Rua, número, cidade, estado"></div>
-    <button class="btn btn-p" onclick="salvarEmpresa()"><i data-lucide="save" style="width:13px;height:13px;"></i> Salvar</button>
+    <button class="btn btn-p" onclick="salvarEmpresa()">&#128190; Salvar</button>
   </div>`;
   lucide.createIcons();
 }
@@ -885,7 +885,7 @@ function renderPedidos() {
       <td><span class="badge ${p.status==='Atendido'?'bg':p.status==='Pendente'?'by':'bo'}">${p.status}</span></td>
       <td style="display:flex;gap:4px;">
         ${p.status==='Pendente'?`<button class="btn btn-g btn-sm" onclick="modalAtenderPedido('${p.id}')">✓ Atender</button>`:''}
-        <button class="btn btn-s btn-sm" onclick="modalEditarPedido('${p.id}')"><i data-lucide="edit-2" style="width:11px;height:11px;"></i></button>
+        <button class="btn btn-s btn-sm" onclick="modalEditarPedido('${p.id}')" title="Editar">✏️</button>
         <button class="btn btn-r btn-sm" onclick="delPedido('${p.id}')"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button>
       </td>
     </tr>`).join('')||'<tr><td colspan="7" class="empty">Nenhum pedido</td></tr>'}
@@ -1047,7 +1047,7 @@ async function modalEditarPedido(id) {
     + '<div style="margin-bottom:10px;"><label class="lbl">Bancas</label><input class="inp" id="ep-bancas" value="'+(p.bancas||'')+'"></div>'
     + '<div style="margin-bottom:14px;"><label class="lbl">Observações</label><input class="inp" id="ep-obs" value="'+(p.obs||'')+'"></div>'
     + '<div style="display:flex;gap:8px;">'
-    + '<button class="btn btn-p" onclick="salvarEdicaoPedido(&quot;\'+p.id+\'&quot;)"><i data-lucide="save" style="width:13px;height:13px;"></i> Salvar</button>'
+    + '<button class="btn btn-p" onclick="salvarEdicaoPedido(&quot;\'+p.id+\'&quot;)">&#128190; Salvar</button>'
     + '<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
     + '</div>');
   lucide.createIcons();
@@ -1056,22 +1056,38 @@ async function modalEditarPedido(id) {
 async function salvarEdicaoPedido(id) {
   var p = DB.pedidos.find(function(x){return x.id===id;});
   if(!p) return;
-  var cliId = document.getElementById('ep-cli').value;
-  var fruta = document.getElementById('ep-fruta').value;
-  var qtd = parseInt(document.getElementById('ep-qtd').value)||0;
-  var valor = parseFloat(document.getElementById('ep-valor').value)||0;
-  var dataPed = document.getElementById('ep-data-ped').value;
-  var dataEnt = document.getElementById('ep-data-ent').value;
-  var bancas = document.getElementById('ep-bancas').value;
-  var obs = document.getElementById('ep-obs').value;
+  var cliEl = document.getElementById('ep-cli');
+  var cliId = cliEl ? cliEl.value : p.cliente_id;
+  var frutaEl = document.getElementById('ep-fruta');
+  var fruta = frutaEl ? frutaEl.value : p.fruta;
+  var qtd = parseInt((document.getElementById('ep-qtd')||{}).value)||0;
+  var valor = parseFloat((document.getElementById('ep-valor')||{}).value)||0;
+  var dataPed = (document.getElementById('ep-data-ped')||{}).value || p.data_pedido;
+  var dataEnt = (document.getElementById('ep-data-ent')||{}).value || p.data_entrega;
+  var bancas = (document.getElementById('ep-bancas')||{}).value || p.bancas;
+  var obs = (document.getElementById('ep-obs')||{}).value || '';
   var cli = DB.clientes.find(function(c){return c.id===cliId;});
-  var updates = {cliente_id:cliId,cliente_nome:cli?cli.nome:p.cliente_nome,fruta:fruta,quantidade:qtd,quantidade_kg:qtd*(p.peso_unitario||1),valor:valor,data_pedido:dataPed,data_entrega:dataEnt,bancas:bancas,obs:obs};
+  var updates = {
+    cliente_id: cliId,
+    cliente_nome: cli ? cli.nome : p.cliente_nome,
+    fruta: fruta,
+    quantidade: qtd,
+    quantidade_kg: qtd*(p.peso_unitario||1),
+    valor: valor,
+    data_pedido: dataPed,
+    data_entrega: dataEnt,
+    bancas: bancas,
+    obs: obs
+  };
+  toast('⏳ Salvando...', 'warn');
   var res = await PUT('/api/pedidos/'+id, updates);
   if(res) {
     Object.assign(p, updates);
     closeModal();
     toast('✅ Pedido atualizado!');
     renderPedidos();
+  } else {
+    toast('❌ Erro ao salvar pedido','err');
   }
 }
 
