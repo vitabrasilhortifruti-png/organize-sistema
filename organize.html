@@ -937,40 +937,39 @@ async function addPedido() {
   if(res){ DB.pedidos.unshift(res); toast('✓ Pedido criado!'); renderPedidos(); }
 }
 async function modalAtenderPedido(id) {
-  const p = DB.pedidos.find(x=>x.id===id);
+  var p = DB.pedidos.find(function(x){return x.id===id;});
   if(!p) return;
-  const lotes = DB.entradas.filter(e=>(e.quantidade_atual??e.quantidade)>0);
+  var lotes = DB.entradas.filter(function(e){return (e.quantidade_atual!=null?e.quantidade_atual:e.quantidade)>0;});
   
-  modal(`<div class="section-title"><i data-lucide="check-circle" style="width:16px;height:16px;color:var(--green);"></i> Atender Pedido — ${{p.cliente_nome}}</div>
-    <div style="margin-bottom:12px;font-size:12px;color:var(--sub);">
-      <strong style="color:var(--text)">${{p.fruta}}</strong> · ${{p.quantidade}} unidades · ${{(p.quantidade_kg||0).toFixed(1)}} kg · Bancas: ${{p.bancas}}
-    </div>
-    <div style="margin-bottom:8px;"><label class="lbl">Selecione os lotes usados para atender este pedido:</label></div>
-    <div id="lotes-atender" style="max-height:280px;overflow-y:auto;margin-bottom:12px;">
-      ${{lotes.length===0?'<div class="empty">Nenhum lote disponível em estoque</div>':
-      lotes.map(l=>{{
-        const saldo=l.quantidade_atual??l.quantidade;
-        return`<div style="display:flex;align-items:center;gap:10px;padding:8px;background:#0d1320;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">
-          <input type="checkbox" class="lat-cb" value="${{l.id}}" data-lote="${{l.lote}}" data-peso="${{l.peso_unitario||1}}" data-saldo="${{saldo}}" style="accent-color:var(--accent);width:15px;height:15px;">
-          <div style="flex:1;">
-            <div style="font-size:12px;font-weight:700;color:var(--text)">${{l.lote}} — ${{l.fruta}}</div>
-            <div style="font-size:10px;color:var(--muted)">Saldo: ${{saldo}} unid. | ${{(saldo*(l.peso_unitario||1)).toFixed(1)}} kg</div>
-          </div>
-          <div>
-            <label style="font-size:10px;color:var(--sub);">Qtd usada:</label>
-            <input type="number" class="inp lat-qtd" data-id="${{l.id}}" min="1" max="${{saldo}}" placeholder="0" style="width:70px;padding:4px 6px;font-size:11px;">
-          </div>
-        </div>`;
-      }}).join('')}}
-    </div>
-    <div id="lat-resumo" style="padding:10px;background:#060a12;border-radius:8px;font-size:12px;color:var(--sub);margin-bottom:14px;">Selecione os lotes acima</div>
-    <div style="display:flex;gap:8px;">
-      <button class="btn btn-g" onclick="confirmarAtenderPedido('${{p.id}}')">✅ Confirmar Atendimento</button>
-      <button class="btn btn-s" onclick="closeModal()">Cancelar</button>
-    </div>`);
+  var lotesHTML = '';
+  if(lotes.length===0) {
+    lotesHTML = '<div class="empty">Nenhum lote disponível em estoque</div>';
+  } else {
+    lotes.forEach(function(l) {
+      var saldo = l.quantidade_atual!=null ? l.quantidade_atual : l.quantidade;
+      lotesHTML += '<div style="display:flex;align-items:center;gap:10px;padding:8px;background:#0d1320;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">'
+        + '<input type="checkbox" class="lat-cb" value="'+l.id+'" data-lote="'+l.lote+'" data-peso="'+(l.peso_unitario||1)+'" data-saldo="'+saldo+'" style="accent-color:var(--accent);width:15px;height:15px;">'
+        + '<div style="flex:1;">'
+        + '<div style="font-size:12px;font-weight:700;color:var(--text)">'+l.lote+' — '+l.fruta+'</div>'
+        + '<div style="font-size:10px;color:var(--muted)">Saldo: '+saldo+' unid. | '+(saldo*(l.peso_unitario||1)).toFixed(1)+' kg</div>'
+        + '</div>'
+        + '<div><label style="font-size:10px;color:var(--sub);">Qtd usada:</label>'
+        + '<input type="number" class="inp lat-qtd" data-id="'+l.id+'" min="1" max="'+saldo+'" placeholder="0" style="width:70px;padding:4px 6px;font-size:11px;"></div>'
+        + '</div>';
+    });
+  }
 
-  // Update resumo on change
-  document.querySelectorAll('.lat-cb, .lat-qtd').forEach(el => {
+  modal('<div class="section-title"><i data-lucide="check-circle" style="width:16px;height:16px;color:var(--green);"></i> Atender Pedido — '+p.cliente_nome+'</div>'
+    + '<div style="margin-bottom:12px;font-size:12px;color:var(--sub);"><strong style="color:var(--text)">'+p.fruta+'</strong> · '+p.quantidade+' unidades · '+(p.quantidade_kg||0).toFixed(1)+' kg · Bancas: '+p.bancas+'</div>'
+    + '<div style="margin-bottom:8px;"><label class="lbl">Selecione os lotes usados:</label></div>'
+    + '<div id="lotes-atender" style="max-height:280px;overflow-y:auto;margin-bottom:12px;">'+lotesHTML+'</div>'
+    + '<div id="lat-resumo" style="padding:10px;background:#060a12;border-radius:8px;font-size:12px;color:var(--sub);margin-bottom:14px;">Selecione os lotes acima</div>'
+    + '<div style="display:flex;gap:8px;">'
+    + '<button class="btn btn-g" onclick="confirmarAtenderPedido(''+p.id+'')">✅ Confirmar Atendimento</button>'
+    + '<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+    + '</div>');
+
+  document.querySelectorAll('.lat-cb, .lat-qtd').forEach(function(el) {
     el.addEventListener('change', atualizarResumoAtender);
     el.addEventListener('input', atualizarResumoAtender);
   });
@@ -978,49 +977,51 @@ async function modalAtenderPedido(id) {
 }
 
 function atualizarResumoAtender() {
-  const cbs = document.querySelectorAll('.lat-cb:checked');
-  let total = 0;
-  let resumo = [];
-  cbs.forEach(cb => {
-    const qtdEl = document.querySelector(`.lat-qtd[data-id="${{cb.value}}"]`);
-    const qtd = parseInt(qtdEl?.value)||0;
-    const kg = qtd * parseFloat(cb.dataset.peso);
+  var cbs = document.querySelectorAll('.lat-cb:checked');
+  var total = 0;
+  var resumo = [];
+  cbs.forEach(function(cb) {
+    var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
+    var qtd = parseInt(qtdEl ? qtdEl.value : 0)||0;
+    var kg = qtd * parseFloat(cb.dataset.peso);
     total += kg;
-    if(qtd>0) resumo.push(`${{cb.dataset.lote}}: ${{qtd}} unid. (${{kg.toFixed(1)}} kg)`);
+    if(qtd>0) resumo.push(cb.dataset.lote+': '+qtd+' unid. ('+kg.toFixed(1)+' kg)');
   });
-  const el = document.getElementById('lat-resumo');
+  var el = document.getElementById('lat-resumo');
   if(el) el.innerHTML = resumo.length > 0 
-    ? `<span style="color:var(--green)">✓ ${{resumo.join(' + ')}} = <strong>${{total.toFixed(1)}} kg total</strong></span>`
+    ? '<span style="color:var(--green)">✓ '+resumo.join(' + ')+' = <strong>'+total.toFixed(1)+' kg total</strong></span>'
     : 'Selecione os lotes acima';
 }
 
 async function confirmarAtenderPedido(id) {
-  const p = DB.pedidos.find(x=>x.id===id);
+  var p = DB.pedidos.find(function(x){return x.id===id;});
   if(!p) return;
-  const cbs = document.querySelectorAll('.lat-cb:checked');
+  var cbs = document.querySelectorAll('.lat-cb:checked');
   if(cbs.length===0) return toast('Selecione ao menos um lote','err');
 
-  const lotesUsados = [];
-  for(const cb of cbs) {
-    const qtdEl = document.querySelector(`.lat-qtd[data-id="${{cb.value}}"]`);
-    const qtd = parseInt(qtdEl?.value)||0;
-    if(qtd<=0) return toast(`Informe a quantidade do lote ${{cb.dataset.lote}}`,'err');
-    if(qtd > parseFloat(cb.dataset.saldo)) return toast(`Quantidade maior que saldo do lote ${{cb.dataset.lote}}`,'err');
+  var lotesUsados = [];
+  for(var i=0; i<cbs.length; i++) {
+    var cb = cbs[i];
+    var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
+    var qtd = parseInt(qtdEl ? qtdEl.value : 0)||0;
+    if(qtd<=0) return toast('Informe a quantidade do lote '+cb.dataset.lote,'err');
+    if(qtd > parseFloat(cb.dataset.saldo)) return toast('Quantidade maior que saldo do lote '+cb.dataset.lote,'err');
     await abaterLote(cb.value, qtd);
-    lotesUsados.push(`${{cb.dataset.lote}}(${{qtd}})`);
+    lotesUsados.push(cb.dataset.lote+'('+qtd+')');
   }
 
-  await PUT(`/api/pedidos/${{id}}`, {{status:'Atendido', lotes: lotesUsados.join(', ')}});
+  await PUT('/api/pedidos/'+id, {status:'Atendido', lotes: lotesUsados.join(', ')});
   p.status = 'Atendido';
   p.lotes = lotesUsados.join(', ');
 
-  const kgTotal = Array.from(cbs).reduce((s,cb)=>{{
-    const qtdEl=document.querySelector(`.lat-qtd[data-id="${{cb.value}}"]`);
-    return s+(parseInt(qtdEl?.value)||0)*parseFloat(cb.dataset.peso);
-  }},0);
+  var kgTotal = 0;
+  cbs.forEach(function(cb) {
+    var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
+    kgTotal += (parseInt(qtdEl ? qtdEl.value : 0)||0) * parseFloat(cb.dataset.peso);
+  });
 
-  const venda={{id:uid(),cliente_id:p.cliente_id,cliente:p.cliente_nome,fruta:p.fruta,quantidade:p.quantidade,quantidade_kg:kgTotal,valor:(p.valor||0)*p.quantidade,data:today(),pedido_id:p.id,origem:'pedido'}};
-  const res=await POST('/api/vendas',venda);
+  var venda = {id:uid(),cliente_id:p.cliente_id,cliente:p.cliente_nome,fruta:p.fruta,quantidade:p.quantidade,quantidade_kg:kgTotal,valor:(p.valor||0)*p.quantidade,data:today(),pedido_id:p.id,origem:'pedido'};
+  var res = await POST('/api/vendas', venda);
   if(res) DB.vendas.unshift(res);
 
   closeModal();
@@ -1030,54 +1031,48 @@ async function confirmarAtenderPedido(id) {
 }
 
 async function modalEditarPedido(id) {
-  const p = DB.pedidos.find(x=>x.id===id);
+  var p = DB.pedidos.find(function(x){return x.id===id;});
   if(!p) return;
-  modal(`<div class="section-title"><i data-lucide="edit-2" style="width:16px;height:16px;"></i> Editar Pedido</div>
-    <div class="frow" style="margin-bottom:10px;">
-      <div><label class="lbl">Cliente</label>
-        <select class="inp" id="ep-cli">
-          ${{DB.clientes.map(c=>`<option value="${{c.id}}" ${{c.id===p.cliente_id?'selected':''}}>${{c.nome}}</option>`).join('')}}
-        </select>
-      </div>
-      <div><label class="lbl">Fruta</label>
-        <select class="inp" id="ep-fruta">
-          ${{['LARANJA','PERA','LIMA TAITI','ABACATE','REPOLHO','CENOURA','MEXERICA POKAN'].map(f=>`<option ${{f===p.fruta?'selected':''}}>${{f}}</option>`).join('')}}
-        </select>
-      </div>
-      <div><label class="lbl">Quantidade</label><input class="inp" id="ep-qtd" type="number" value="${{p.quantidade}}"></div>
-      <div><label class="lbl">Valor unit. (R$)</label><input class="inp" id="ep-valor" type="number" step="0.01" value="${{p.valor||0}}"></div>
-      <div><label class="lbl">Data Pedido</label><input class="inp" id="ep-data-ped" type="date" value="${{p.data_pedido}}"></div>
-      <div><label class="lbl">Data Entrega</label><input class="inp" id="ep-data-ent" type="date" value="${{p.data_entrega}}"></div>
-    </div>
-    <div style="margin-bottom:10px;"><label class="lbl">Bancas</label><input class="inp" id="ep-bancas" value="${{p.bancas}}"></div>
-    <div style="margin-bottom:14px;"><label class="lbl">Observações</label><input class="inp" id="ep-obs" value="${{p.obs||''}}"></div>
-    <div style="display:flex;gap:8px;">
-      <button class="btn btn-p" onclick="salvarEdicaoPedido('${{p.id}}')"><i data-lucide="save" style="width:13px;height:13px;"></i> Salvar</button>
-      <button class="btn btn-s" onclick="closeModal()">Cancelar</button>
-    </div>`);
+  var cliOpts = DB.clientes.map(function(c){return '<option value="'+c.id+'"'+(c.id===p.cliente_id?' selected':'')+'>'+c.nome+'</option>';}).join('');
+  var frutaOpts = ['LARANJA','PERA','LIMA TAITI','ABACATE','REPOLHO','CENOURA','MEXERICA POKAN'].map(function(f){return '<option'+(f===p.fruta?' selected':'')+'>'+f+'</option>';}).join('');
+  modal('<div class="section-title"><i data-lucide="edit-2" style="width:16px;height:16px;"></i> Editar Pedido</div>'
+    + '<div class="frow" style="margin-bottom:10px;">'
+    + '<div><label class="lbl">Cliente</label><select class="inp" id="ep-cli">'+cliOpts+'</select></div>'
+    + '<div><label class="lbl">Fruta</label><select class="inp" id="ep-fruta">'+frutaOpts+'</select></div>'
+    + '<div><label class="lbl">Quantidade</label><input class="inp" id="ep-qtd" type="number" value="'+p.quantidade+'"></div>'
+    + '<div><label class="lbl">Valor unit. (R$)</label><input class="inp" id="ep-valor" type="number" step="0.01" value="'+(p.valor||0)+'"></div>'
+    + '<div><label class="lbl">Data Pedido</label><input class="inp" id="ep-data-ped" type="date" value="'+(p.data_pedido||'')+'"></div>'
+    + '<div><label class="lbl">Data Entrega</label><input class="inp" id="ep-data-ent" type="date" value="'+(p.data_entrega||'')+'"></div>'
+    + '</div>'
+    + '<div style="margin-bottom:10px;"><label class="lbl">Bancas</label><input class="inp" id="ep-bancas" value="'+(p.bancas||'')+'"></div>'
+    + '<div style="margin-bottom:14px;"><label class="lbl">Observações</label><input class="inp" id="ep-obs" value="'+(p.obs||'')+'"></div>'
+    + '<div style="display:flex;gap:8px;">'
+    + '<button class="btn btn-p" onclick="salvarEdicaoPedido(''+p.id+'')"><i data-lucide="save" style="width:13px;height:13px;"></i> Salvar</button>'
+    + '<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+    + '</div>');
   lucide.createIcons();
 }
 
 async function salvarEdicaoPedido(id) {
-  const p = DB.pedidos.find(x=>x.id===id);
+  var p = DB.pedidos.find(function(x){return x.id===id;});
   if(!p) return;
-  const cliId = document.getElementById('ep-cli').value;
-  const fruta = document.getElementById('ep-fruta').value;
-  const qtd = parseInt(document.getElementById('ep-qtd').value)||0;
-  const valor = parseFloat(document.getElementById('ep-valor').value)||0;
-  const dataPed = document.getElementById('ep-data-ped').value;
-  const dataEnt = document.getElementById('ep-data-ent').value;
-  const bancas = document.getElementById('ep-bancas').value;
-  const obs = document.getElementById('ep-obs').value;
-  const cli = DB.clientes.find(c=>c.id===cliId);
-  const updates = {{cliente_id:cliId,cliente_nome:cli?.nome||p.cliente_nome,fruta,quantidade:qtd,quantidade_kg:qtd*(p.peso_unitario||1),valor,data_pedido:dataPed,data_entrega:dataEnt,bancas,obs}};
-  const res = await PUT(`/api/pedidos/${{id}}`, updates);
-  if(res) {{
+  var cliId = document.getElementById('ep-cli').value;
+  var fruta = document.getElementById('ep-fruta').value;
+  var qtd = parseInt(document.getElementById('ep-qtd').value)||0;
+  var valor = parseFloat(document.getElementById('ep-valor').value)||0;
+  var dataPed = document.getElementById('ep-data-ped').value;
+  var dataEnt = document.getElementById('ep-data-ent').value;
+  var bancas = document.getElementById('ep-bancas').value;
+  var obs = document.getElementById('ep-obs').value;
+  var cli = DB.clientes.find(function(c){return c.id===cliId;});
+  var updates = {cliente_id:cliId,cliente_nome:cli?cli.nome:p.cliente_nome,fruta:fruta,quantidade:qtd,quantidade_kg:qtd*(p.peso_unitario||1),valor:valor,data_pedido:dataPed,data_entrega:dataEnt,bancas:bancas,obs:obs};
+  var res = await PUT('/api/pedidos/'+id, updates);
+  if(res) {
     Object.assign(p, updates);
     closeModal();
     toast('✅ Pedido atualizado!');
     renderPedidos();
-  }}
+  }
 }
 
 async function atenderPedido(id) {
@@ -1529,7 +1524,7 @@ function addItemExtra() {
   var n = itemExtraCount;
   div.innerHTML = '<div style="display:flex;justify-content:space-between;margin-bottom:8px;">'
     + '<span style="font-size:11px;font-weight:700;color:var(--accent);">Item Extra '+n+'</span>'
-    + '<button class="btn btn-r btn-sm" onclick="document.getElementById('item-extra-'+n+'').remove()">✕ Remover</button>'
+    + '<button class="btn btn-r btn-sm" onclick="var el=document.getElementById('item-extra-'+n);if(el)el.remove()">✕ Remover</button>'
     + '</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">'
     + '<div><label class="lbl">Fruta</label><select class="inp item-fruta">'+frutaOpts+'</select></div>'
