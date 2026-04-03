@@ -501,39 +501,143 @@ async function restaurarLote(lote_id, unidades) {
 // DASHBOARD
 // ═══════════════════════════════════════════════════════
 function renderDashboard() {
-  const content = document.getElementById('content');
-  const totalPedidos = DB.pedidos.length;
-  const pedPendentes = DB.pedidos.filter(p=>p.status==='Pendente').length;
-  const totalVendas = DB.vendas.reduce((s,v)=>s+(v.valor||0),0);
-  const kgEstoque = DB.entradas.reduce((s,e)=>s+((e.quantidade_atual??e.quantidade)*(e.peso_unitario||1)),0);
+  var content = document.getElementById('content');
+  var totalPedidos = DB.pedidos.length;
+  var pedPendentes = DB.pedidos.filter(function(p){return p.status==='Pendente';}).length;
+  var totalVendas = DB.vendas.reduce(function(s,v){return s+(v.valor||0);},0);
+  var kgEstoque = DB.entradas.reduce(function(s,e){var q=e.quantidade_atual!=null?e.quantidade_atual:e.quantidade; return s+q*(e.peso_unitario||1);},0);
+  var totalRecebido = DB.pagamentos.reduce(function(s,p){return s+(p.valor||0);},0);
+  var totalPedVal = DB.pedidos.reduce(function(s,p){return s+(p.valor||0)*p.quantidade;},0);
+  var aReceber = totalPedVal - totalRecebido;
 
-  content.innerHTML=`
-  <div class="grid4" style="margin-bottom:16px;">
-    <div class="stat"><div class="stat-icon"><i data-lucide="package-plus" style="width:14px;height:14px;"></i> Entradas</div><div class="stat-n">${DB.entradas.length}</div><div class="stat-l">lotes registrados</div></div>
-    <div class="stat"><div class="stat-icon"><i data-lucide="clipboard-list" style="width:14px;height:14px;"></i> Pedidos</div><div class="stat-n">${totalPedidos}</div><div class="stat-l">${pedPendentes} pendente(s)</div></div>
-    <div class="stat"><div class="stat-icon"><i data-lucide="archive" style="width:14px;height:14px;"></i> KG em Estoque</div><div class="stat-n">${kgEstoque.toFixed(0)}</div><div class="stat-l">kg disponível</div></div>
-    <div class="stat"><div class="stat-icon"><i data-lucide="trending-up" style="width:14px;height:14px;"></i> Vendas</div><div class="stat-n">${fmtMoney(totalVendas)}</div><div class="stat-l">${DB.vendas.length} registros</div></div>
-    <div class="stat"><div class="stat-icon"><i data-lucide="users" style="width:14px;height:14px;"></i> Clientes</div><div class="stat-n">${DB.clientes.length}</div><div class="stat-l">cadastrados</div></div>
-    <div class="stat"><div class="stat-icon"><i data-lucide="truck" style="width:14px;height:14px;"></i> Fornecedores</div><div class="stat-n">${DB.fornecedores.length}</div><div class="stat-l">cadastrados</div></div>
-  </div>
-  ${pedPendentes>0?`
-  <div class="card" style="margin-bottom:16px;">
-    <div class="section-title"><i data-lucide="alert-circle" style="width:16px;height:16px;color:var(--yellow);"></i> Pedidos Pendentes (${pedPendentes})</div>
-    <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Cliente</th><th>Fruta</th><th>Qtd</th><th>Entrega</th><th>Ações</th></tr></thead><tbody>
-    ${DB.pedidos.filter(p=>p.status==='Pendente').slice(0,5).map(p=>`
-      <tr><td><strong style="color:var(--text)">${p.cliente_nome}</strong></td><td>${p.fruta}</td><td>${p.quantidade}</td><td>${fmtDate(p.data_entrega)}</td>
-      <td><button class="btn btn-g btn-sm" onclick="modalAtenderPedido('${p.id}')">✓ Atender</button></td></tr>`).join('')}
-    </tbody></table></div>
-  </div>`:''}
-  <div class="card">
-    <div class="section-title"><i data-lucide="database" style="width:16px;height:16px;"></i> Banco de Dados</div>
-    <div style="font-size:12px;color:var(--sub);line-height:2;">
-      ✅ <strong>Dados salvos no servidor</strong> — backup automático ativo<br>
-      🔄 Sincronização em tempo real entre todos os usuários<br>
-      💾 Backups automáticos a cada 10 minutos e a cada ação<br>
-      🔒 Dados persistentes — atualizações não apagam registros
-    </div>
-  </div>`;
+  // Vendas por dia - ultimos 7 dias
+  var hoje = new Date();
+  var dias7 = [];
+  for(var i=6; i>=0; i--) {
+    var d = new Date(hoje); d.setDate(d.getDate()-i);
+    var ds = d.toISOString().split('T')[0];
+    var label = d.toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit'});
+    var vDia = DB.vendas.filter(function(v){return v.data===ds;}).reduce(function(s,v){return s+(v.valor||0);},0);
+    dias7.push({ds:ds,label:label,vendas:vDia});
+  }
+  var maxV = Math.max.apply(null,dias7.map(function(d){return d.vendas;}))||1;
+
+  // Top clientes
+  var cliMap = {};
+  DB.pedidos.forEach(function(p){if(!cliMap[p.cliente_nome])cliMap[p.cliente_nome]=0;cliMap[p.cliente_nome]+=(p.valor||0)*p.quantidade;});
+  var topCli = Object.keys(cliMap).map(function(k){return{nome:k,total:cliMap[k]};}).sort(function(a,b){return b.total-a.total;}).slice(0,5);
+  var maxCli = topCli.length?topCli[0].total:1;
+
+  // Top frutas
+  var frutaMap = {};
+  DB.pedidos.forEach(function(p){if(!frutaMap[p.fruta])frutaMap[p.fruta]=0;frutaMap[p.fruta]+=(p.quantidade_kg||0);});
+  var topFrutas = Object.keys(frutaMap).map(function(k){return{nome:k,kg:frutaMap[k]};}).sort(function(a,b){return b.kg-a.kg;}).slice(0,5);
+  var maxFruta = topFrutas.length?topFrutas[0].kg:1;
+
+  // Estoque por fruta
+  var estMap = {};
+  DB.entradas.forEach(function(e){var s=e.quantidade_atual!=null?e.quantidade_atual:e.quantidade;if(s>0){if(!estMap[e.fruta])estMap[e.fruta]={qtd:0,kg:0};estMap[e.fruta].qtd+=s;estMap[e.fruta].kg+=s*(e.peso_unitario||1);}});
+
+  var cores = ['var(--accent)','#f59e0b','#10b981','#6366f1','#ec4899'];
+  var todayStr = today();
+
+  // Pedidos pendentes
+  var pedsPend = DB.pedidos.filter(function(p){return p.status==='Pendente';});
+  var pendHTML = '';
+  if(pedsPend.length>0) {
+    var rows = pedsPend.slice(0,5).map(function(p){
+      var atrasado = p.data_entrega < todayStr;
+      return '<tr>'
+        +'<td><strong style="color:var(--text)">'+p.cliente_nome+'</strong></td>'
+        +'<td>'+p.fruta+'</td><td>'+p.quantidade+'</td>'
+        +'<td style="color:'+(atrasado?'var(--red)':'var(--text)')+';">'+(atrasado?'⚠️ ':'')+fmtDate(p.data_entrega)+'</td>'
+        +'<td><button class="btn btn-g btn-sm" data-pid="'+p.id+'" onclick="modalAtenderPedido(this.dataset.pid)">✓ Atender</button></td>'
+        +'</tr>';
+    }).join('');
+    pendHTML = '<div class="card" style="margin-bottom:16px;border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.05);">'
+      +'<div class="section-title" style="color:var(--yellow);">⚠️ Pedidos Pendentes ('+pedsPend.length+')</div>'
+      +'<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Cliente</th><th>Fruta</th><th>Qtd</th><th>Entrega</th><th>Ação</th></tr></thead><tbody>'
+      +rows+'</tbody></table></div></div>';
+  }
+
+  // Grafico barras vendas
+  var barras = dias7.map(function(d){
+    var h = d.vendas>0 ? Math.max(6,Math.round((d.vendas/maxV)*100)) : 4;
+    var cor = d.vendas>0?'var(--accent)':'var(--border)';
+    var vlabel = d.vendas>0?'R$'+d.vendas.toFixed(0):'';
+    return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">'
+      +'<div style="font-size:8px;color:var(--sub);white-space:nowrap;">'+vlabel+'</div>'
+      +'<div style="width:100%;background:'+cor+';border-radius:4px 4px 0 0;height:'+h+'px;"></div>'
+      +'<div style="font-size:9px;color:var(--muted);text-align:center;">'+d.label+'</div>'
+      +'</div>';
+  }).join('');
+
+  // Top clientes bars
+  var cliHTML = topCli.length===0
+    ? '<div class="empty">Nenhum pedido</div>'
+    : topCli.map(function(c,i){
+        var pct = Math.round((c.total/maxCli)*100);
+        return '<div style="margin-bottom:8px;">'
+          +'<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px;">'
+          +'<span style="color:var(--text);font-weight:600;">'+(i+1)+'. '+c.nome+'</span>'
+          +'<span style="color:'+cores[i]+';">'+fmtMoney(c.total)+'</span></div>'
+          +'<div class="pbar"><div class="pbar-fill" style="width:'+pct+'%;background:'+cores[i]+';"></div></div>'
+          +'</div>';
+      }).join('');
+
+  // Top frutas bars
+  var frutaHTML = topFrutas.length===0
+    ? '<div class="empty">Nenhum pedido</div>'
+    : topFrutas.map(function(f,i){
+        var pct = Math.round((f.kg/maxFruta)*100);
+        return '<div style="margin-bottom:8px;">'
+          +'<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px;">'
+          +'<span style="color:var(--text);font-weight:600;">'+(i+1)+'. '+f.nome+'</span>'
+          +'<span style="color:'+cores[i]+';">'+f.kg.toFixed(0)+' kg</span></div>'
+          +'<div class="pbar"><div class="pbar-fill" style="width:'+pct+'%;background:'+cores[i]+';"></div></div>'
+          +'</div>';
+      }).join('');
+
+  // Estoque HTML
+  var estFrutas = Object.keys(estMap);
+  var estHTML = estFrutas.length===0
+    ? '<div class="empty">Estoque zerado</div>'
+    : estFrutas.map(function(f){
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">'
+          +'<span style="font-size:12px;font-weight:600;color:var(--text);">'+f+'</span>'
+          +'<div style="display:flex;gap:10px;font-size:11px;">'
+          +'<span style="color:var(--sub);">'+estMap[f].qtd+' un</span>'
+          +'<span style="color:var(--accent);font-weight:700;">'+estMap[f].kg.toFixed(0)+' kg</span>'
+          +'</div></div>';
+      }).join('');
+
+  content.innerHTML =
+    '<div class="grid4" style="margin-bottom:16px;">'
+    +'<div class="stat"><div class="stat-icon">📦 Entradas</div><div class="stat-n">'+DB.entradas.length+'</div><div class="stat-l">lotes registrados</div></div>'
+    +'<div class="stat"><div class="stat-icon">📋 Pedidos</div><div class="stat-n">'+totalPedidos+'</div><div class="stat-l" style="color:'+(pedPendentes>0?'var(--yellow)':'var(--muted)')+'">'+pedPendentes+' pendente(s)</div></div>'
+    +'<div class="stat"><div class="stat-icon">⚖️ KG Estoque</div><div class="stat-n">'+kgEstoque.toFixed(0)+'</div><div class="stat-l">kg disponível</div></div>'
+    +'<div class="stat"><div class="stat-icon">💰 Vendas</div><div class="stat-n" style="font-size:16px;">'+fmtMoney(totalVendas)+'</div><div class="stat-l">'+DB.vendas.length+' registros</div></div>'
+    +'<div class="stat"><div class="stat-icon">✅ Recebido</div><div class="stat-n" style="font-size:16px;color:var(--green);">'+fmtMoney(totalRecebido)+'</div><div class="stat-l">'+DB.pagamentos.length+' pagtos</div></div>'
+    +'<div class="stat"><div class="stat-icon" style="color:'+(aReceber>0?'var(--red)':'var(--green)')+'">⚠️ A Receber</div><div class="stat-n" style="font-size:16px;color:'+(aReceber>0?'var(--red)':'var(--green)')+';">'+fmtMoney(Math.abs(aReceber))+'</div><div class="stat-l">'+(aReceber>0?'em aberto':'quitado')+'</div></div>'
+    +'<div class="stat"><div class="stat-icon">👥 Clientes</div><div class="stat-n">'+DB.clientes.length+'</div><div class="stat-l">cadastrados</div></div>'
+    +'<div class="stat"><div class="stat-icon">🚛 Fornecedores</div><div class="stat-n">'+DB.fornecedores.length+'</div><div class="stat-l">cadastrados</div></div>'
+    +'</div>'
+    +pendHTML
+    +'<div class="grid2" style="margin-bottom:16px;">'
+    +'<div class="card"><div class="section-title">📈 Vendas — Últimos 7 dias</div>'
+    +'<div style="display:flex;align-items:flex-end;gap:6px;height:130px;padding-bottom:20px;">'+barras+'</div></div>'
+    +'<div class="card"><div class="section-title">🏆 Top Clientes</div>'+cliHTML+'</div>'
+    +'</div>'
+    +'<div class="grid2" style="margin-bottom:16px;">'
+    +'<div class="card"><div class="section-title">🍊 Frutas Mais Pedidas</div>'+frutaHTML+'</div>'
+    +'<div class="card"><div class="section-title">📦 Estoque por Fruta</div>'+estHTML+'</div>'
+    +'</div>'
+    +'<div class="card"><div class="section-title">🔒 Banco de Dados</div>'
+    +'<div style="font-size:12px;color:var(--sub);line-height:2;">'
+    +'✅ <strong>Dados salvos no servidor</strong> — backup automático ativo<br>'
+    +'🔄 Sincronização em tempo real<br>'
+    +'💾 Backups automáticos a cada 10 minutos<br>'
+    +'🔒 Dados persistentes</div></div>';
   lucide.createIcons();
 }
 
@@ -1360,6 +1464,17 @@ function renderFinanceiro() {
   }).filter(c=>c.totalPed>0||c.totalPag>0);
   const totalDevedor=saldos.reduce((s,c)=>s+Math.max(0,c.saldo),0);
   document.getElementById('content').innerHTML=`
+  <div class="card" style="margin-bottom:12px;">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <div class="section-title" style="margin:0;flex:1;">🔍 Filtrar por Período</div>
+      <label style="font-size:11px;color:var(--sub);">De:</label>
+      <input class="inp" id="fin-dt-ini" type="date" style="max-width:150px;" oninput="renderFinanceiro()">
+      <label style="font-size:11px;color:var(--sub);">Até:</label>
+      <input class="inp" id="fin-dt-fim" type="date" style="max-width:150px;" oninput="renderFinanceiro()">
+      <button class="btn btn-s btn-sm" onclick="document.getElementById('fin-dt-ini').value='';document.getElementById('fin-dt-fim').value='';renderFinanceiro()">✕ Limpar</button>
+      <button class="btn btn-p btn-sm" onclick="imprimirRelatorio()">🖨️ Imprimir</button>
+    </div>
+  </div>
   <div class="grid4" style="margin-bottom:16px;">
     <div class="stat"><div class="stat-icon">💰 A Receber</div><div class="stat-n" style="color:var(--red)">${fmtMoney(totalDevedor)}</div></div>
     <div class="stat"><div class="stat-icon">✓ Recebido</div><div class="stat-n" style="color:var(--green)">${fmtMoney(DB.pagamentos.reduce((s,p)=>s+(p.valor||0),0))}</div></div>
@@ -1463,6 +1578,7 @@ function renderRelatorios() {
       <div style="font-size:12px;color:var(--sub);margin-bottom:12px;">Backups automáticos a cada ação e a cada 10 minutos.</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
         <button class="btn btn-p" onclick="fazerBackupManual()"><i data-lucide="save" style="width:13px;height:13px;"></i> Backup Agora</button>
+        <button class="btn btn-s" onclick="imprimirRelatorio()">🖨️ Imprimir Relatório</button>
         <button class="btn btn-s" onclick="imprimirRelatorio()">🖨️ Imprimir Relatório</button>
         <button class="btn btn-g" onclick="enviarBackupEmail()"><i data-lucide="mail" style="width:13px;height:13px;"></i> Enviar por E-mail</button>
       </div>
@@ -1703,7 +1819,7 @@ function abrirJanelaImpressao(titulo, conteudoHTML) {
     <div class="print-header">
       <div>
         <div class="print-logo">${DB.empresa.nome||'Organize'}</div>
-        <div class="print-sub">Consultoria Operacional</div>
+        <div class="print-sub"><div class="brand-sub" style="font-size:9px;color:var(--muted);">Sistema Elaborado por Organize Consultoria Operacional (11) 97237-6579</div>
         <div class="print-sub">${DB.empresa.telefone||''} ${DB.empresa.email||''}</div>
       </div>
       <div style="text-align:right;font-size:10px;color:#666;">
