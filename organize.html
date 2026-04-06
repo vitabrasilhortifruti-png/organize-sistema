@@ -592,7 +592,7 @@ function renderDashboard() {
     }).join('');
     pendHTML = '<div class="card" style="margin-bottom:16px;border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.05);">'
       +'<div class="section-title" style="color:var(--yellow);">⚠️ Pedidos Pendentes ('+pedsPend.length+')</div>'
-      +'<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Cliente</th><th>Fruta</th><th>Qtd</th><th>Entrega</th><th>Ação</th></tr></thead><tbody>'
+      +'<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Cliente</th><th>Fruta</th><th>Qtd (cx)</th><th>Peso (kg)</th><th>Entrega</th><th>Ação</th></tr></thead><tbody>'
       +rows+'</tbody></table></div></div>';
   }
 
@@ -1102,10 +1102,12 @@ function renderPedidos() {
       <input class="inp" id="ped-search" placeholder="🔍 Buscar cliente..." style="max-width:220px;" oninput="filtrarTabelaNome('ped-tabela',this.value)">
       <button class="btn btn-s btn-sm" onclick="document.getElementById('ped-search').value='';filtrarTabelaNome('ped-tabela','')">✕</button>
     </div>
-    <div class="tbl-wrap"><table class="tbl" id="ped-tabela"><thead><tr><th>Cliente</th><th>Fruta</th><th>Qtd</th><th>Valor</th><th>Entrega</th><th>Status</th><th>Ações</th></tr></thead><tbody>
+    <div class="tbl-wrap"><table class="tbl" id="ped-tabela"><thead><tr><th>Cliente</th><th>Fruta</th><th>Qtd (cx)</th><th>Peso Total</th><th>Valor</th><th>Entrega</th><th>Status</th><th>Ações</th></tr></thead><tbody>
     ${DB.pedidos.map(p=>`<tr>
       <td style="color:var(--text);font-weight:600">${p.cliente_nome}</td>
-      <td>${p.fruta}</td><td>${p.quantidade}</td>
+      <td>${p.fruta}</td>
+      <td>${p.quantidade} cx</td>
+      <td><strong style="color:var(--accent)">${(p.quantidade_kg||0).toFixed(0)} kg</strong></td>
       <td>${fmtMoney((p.valor||0)*p.quantidade)}</td>
       <td>${fmtDate(p.data_entrega)}</td>
       <td><span class="badge ${p.status==='Atendido'?'bg':p.status==='Pendente'?'by':'bo'}">${p.status}</span></td>
