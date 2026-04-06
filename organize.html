@@ -1098,12 +1098,27 @@ function renderPedidos() {
   </div>
   <div class="card">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-      <div class="section-title" style="margin:0;flex:1;"><i data-lucide="clipboard-list" style="width:16px;height:16px;"></i> Pedidos (${DB.pedidos.length})</div>
-      <input class="inp" id="ped-search" placeholder="🔍 Buscar cliente..." style="max-width:220px;" oninput="filtrarTabelaNome('ped-tabela',this.value)">
-      <button class="btn btn-s btn-sm" onclick="document.getElementById('ped-search').value='';filtrarTabelaNome('ped-tabela','')">✕</button>
+      <div class="section-title" style="margin:0;flex:1;"><i data-lucide="clipboard-list" style="width:16px;height:16px;"></i> Pedidos (<span id="ped-count">${DB.pedidos.length}</span>)</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        <input class="inp" id="ped-search" placeholder="🔍 Buscar cliente..." style="max-width:160px;" oninput="renderPedidosFiltrado()">
+        <label style="font-size:10px;color:var(--sub);">Pedido:</label>
+        <input class="inp" id="ped-f-ini" type="date" style="max-width:130px;" oninput="renderPedidosFiltrado()">
+        <label style="font-size:10px;color:var(--sub);">até</label>
+        <input class="inp" id="ped-f-fim" type="date" style="max-width:130px;" oninput="renderPedidosFiltrado()">
+        <label style="font-size:10px;color:var(--sub);">Entrega:</label>
+        <input class="inp" id="ped-f-ent" type="date" style="max-width:130px;" oninput="renderPedidosFiltrado()">
+        <select class="inp" id="ped-f-status" style="max-width:130px;" onchange="renderPedidosFiltrado()">
+          <option value="">Todos os status</option>
+          <option value="Pendente">Pendente</option>
+          <option value="Atendido">Atendido</option>
+        </select>
+        <button class="btn btn-s btn-sm" onclick="limparFiltrosPedidos()">✕ Limpar</button>
+        <button class="btn btn-p btn-sm" onclick="imprimirPedidosFiltrados()">🖨️ Imprimir</button>
+        <button class="btn btn-g btn-sm" onclick="imprimirRelatorioProducao()">📋 Produção</button>
+      </div>
     </div>
     <div class="tbl-wrap"><table class="tbl" id="ped-tabela"><thead><tr><th>Cliente</th><th>Fruta</th><th>Qtd (cx)</th><th>Peso Total</th><th>Valor</th><th>Entrega</th><th>Status</th><th>Ações</th></tr></thead><tbody>
-    ${DB.pedidos.map(p=>`<tr>
+    ${getPedidosFiltrados().map(p=>`<tr>
       <td style="color:var(--text);font-weight:600">${p.cliente_nome}</td>
       <td>${p.fruta}</td>
       <td>${p.quantidade} cx</td>
@@ -1516,8 +1531,32 @@ async function addVenda() {
   if(res){ DB.vendas.unshift(res); toast('✓ Venda registrada'); renderVendas(); }
 }
 async function delVenda(id) {
-  if(!await DEL(`/api/vendas/${id}`)) return;
-  DB.vendas=DB.vendas.filter(v=>v.id!==id); renderVendas();
+  var v = DB.vendas.find(function(x){return x.id===id;});
+  if(!v) return;
+  var msg = 'Excluir esta venda?';
+  if(v.pedido_id) msg += '\nAtenção: se tiver lote vinculado ao pedido, exclua pelo Pedido para restaurar o estoque corretamente.';
+  if(!confirm(msg)) return;
+  // If venda has a pedido_id, use the /completo endpoint to restore stock
+  if(v.pedido_id) {
+    var ped = DB.pedidos.find(function(x){return x.id===v.pedido_id;});
+    if(ped && ped.status === 'Atendido' && ped.lotes && ped.lotes !== 'A definir pela produção') {
+      // Restore stock via pedido completo delete
+      var res = await DEL('/api/pedidos/'+v.pedido_id+'/completo');
+      if(res) {
+        DB.pedidos = DB.pedidos.filter(function(x){return x.id!==v.pedido_id;});
+        DB.vendas = DB.vendas.filter(function(x){return x.id!==id;});
+        await loadAllData();
+        toast('✅ Venda excluída e estoque restaurado!');
+        renderVendas();
+        return;
+      }
+    }
+  }
+  // Manual venda without pedido
+  if(!await DEL('/api/vendas/'+id)) return;
+  DB.vendas = DB.vendas.filter(function(v){return v.id!==id;});
+  toast('✅ Venda excluída!');
+  renderVendas();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2377,6 +2416,150 @@ function abrirDetalheEntrada(loteId) {
     +'</tr></thead><tbody>'+pedRows+'</tbody></table>'
     +'</div>'
   );
+}
+
+
+
+// ═══════════════════════════════════════════════════════
+// FILTROS DE PEDIDOS
+// ═══════════════════════════════════════════════════════
+function getPedidosFiltrados() {
+  var busca = (document.getElementById('ped-search')||{}).value || '';
+  var dtIni = (document.getElementById('ped-f-ini')||{}).value || '';
+  var dtFim = (document.getElementById('ped-f-fim')||{}).value || '';
+  var dtEnt = (document.getElementById('ped-f-ent')||{}).value || '';
+  var status = (document.getElementById('ped-f-status')||{}).value || '';
+  return DB.pedidos.filter(function(p) {
+    if(busca && p.cliente_nome.toLowerCase().indexOf(busca.toLowerCase()) === -1) return false;
+    if(dtIni && p.data_pedido < dtIni) return false;
+    if(dtFim && p.data_pedido > dtFim) return false;
+    if(dtEnt && p.data_entrega !== dtEnt) return false;
+    if(status && p.status !== status) return false;
+    return true;
+  });
+}
+
+function renderPedidosFiltrado() {
+  var filtrados = getPedidosFiltrados();
+  var el = document.getElementById('ped-count');
+  if(el) el.textContent = filtrados.length+'/'+DB.pedidos.length;
+  var tbody = document.getElementById('ped-tabela');
+  if(!tbody) return;
+  // Remove thead from tbody before replacing
+  var rows = filtrados.map(function(p) {
+    var atrasado = p.data_entrega < today() && p.status === 'Pendente';
+    return '<tr data-nome="'+p.cliente_nome.toLowerCase()+'">'
+      +'<td style="color:var(--text);font-weight:600">'+p.cliente_nome+'</td>'
+      +'<td>'+p.fruta+'</td>'
+      +'<td>'+p.quantidade+' cx</td>'
+      +'<td><strong style="color:var(--accent)">'+(p.quantidade_kg||0).toFixed(0)+' kg</strong></td>'
+      +'<td>'+fmtMoney((p.valor||0)*p.quantidade)+'</td>'
+      +'<td style="color:'+(atrasado?'var(--red)':'')+'">'+fmtDate(p.data_entrega)+(atrasado?' ⚠️':'')+'</td>'
+      +'<td><span class="badge '+(p.status==='Atendido'?'bg':p.status==='Pendente'?'by':'bo')+'">'+p.status+'</span></td>'
+      +'<td style="display:flex;gap:4px;flex-wrap:wrap;">'
+      +(p.status==='Pendente'?'<button class="btn btn-g btn-sm" data-pid="'+p.id+'" onclick="modalAtenderPedido(this.dataset.pid)">✓ Atender</button>':'')
+      +'<button class="btn btn-s btn-sm" data-pid="'+p.id+'" onclick="modalEditarPedido(this.dataset.pid)" title="Editar">✏️</button>'
+      +'<button class="btn btn-s btn-sm" data-pid="'+p.id+'" onclick="imprimirPedido(this.dataset.pid)" title="Imprimir">🖨️</button>'
+      +'<button class="btn btn-r btn-sm" data-pid="'+p.id+'" onclick="delPedido(this.dataset.pid)"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button>'
+      +'</td></tr>';
+  }).join('');
+  // Find the tbody element and replace its innerHTML (only the rows, not the thead)
+  var tbl = document.getElementById('ped-tabela');
+  if(tbl) {
+    var thead = tbl.querySelector('thead');
+    tbl.innerHTML = '';
+    if(thead) tbl.appendChild(thead);
+    tbl.innerHTML += rows || '<tr><td colspan="8" class="empty">Nenhum pedido encontrado</td></tr>';
+    lucide.createIcons();
+  }
+}
+
+function limparFiltrosPedidos() {
+  var ids = ['ped-search','ped-f-ini','ped-f-fim','ped-f-ent'];
+  ids.forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+  var sel = document.getElementById('ped-f-status');
+  if(sel) sel.value = '';
+  renderPedidosFiltrado();
+}
+
+function imprimirPedidosFiltrados() {
+  var filtrados = getPedidosFiltrados();
+  var totalCx = filtrados.reduce(function(s,p){return s+p.quantidade;},0);
+  var totalKg = filtrados.reduce(function(s,p){return s+(p.quantidade_kg||0);},0);
+  var totalVal = filtrados.reduce(function(s,p){return s+(p.valor||0)*p.quantidade;},0);
+  var rows = filtrados.map(function(p){
+    return '<tr><td>'+p.cliente_nome+'</td><td>'+p.fruta+'</td>'
+      +'<td>'+p.quantidade+' cx</td><td>'+(p.quantidade_kg||0).toFixed(0)+' kg</td>'
+      +'<td>R$ '+((p.valor||0).toFixed(2))+'</td><td>R$ '+((p.valor||0)*p.quantidade).toFixed(2)+'</td>'
+      +'<td>'+fmtDate(p.data_pedido)+'</td><td>'+fmtDate(p.data_entrega)+'</td>'
+      +'<td><span style="background:'+(p.status==='Atendido'?'#d1fae5':'#fef3c7')+';color:'+(p.status==='Atendido'?'#065f46':'#92400e')+';padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">'+p.status+'</span></td>'
+      +'</tr>';
+  }).join('') || '<tr><td colspan="9" style="text-align:center;padding:12px;color:#999;">Nenhum pedido</td></tr>';
+  var html = '<div class="pt">📋 Relatório de Pedidos</div>'
+    +'<div class="sec"><h3>Resumo</h3><div class="row">'
+    +'<div class="fld"><div class="lbl">Total Pedidos</div><div class="val" style="font-size:18px;">'+filtrados.length+'</div></div>'
+    +'<div class="fld"><div class="lbl">Total Caixas</div><div class="val" style="font-size:18px;">'+totalCx+' cx</div></div>'
+    +'<div class="fld"><div class="lbl">Total KG</div><div class="val" style="font-size:18px;color:#f97316;">'+totalKg.toFixed(0)+' kg</div></div>'
+    +'<div class="fld"><div class="lbl">Valor Total</div><div class="val" style="font-size:18px;color:#10b981;">R$ '+totalVal.toFixed(2)+'</div></div>'
+    +'</div></div>'
+    +'<div class="sec"><h3>Pedidos</h3>'
+    +'<table><tr><th>Cliente</th><th>Fruta</th><th>Qtd</th><th>Peso</th><th>Vl.Unit</th><th>Total</th><th>Data Pedido</th><th>Entrega</th><th>Status</th></tr>'
+    +rows+'</table></div>';
+  abrirJanelaImpressao('Relatório de Pedidos', html);
+}
+
+function imprimirRelatorioProducao() {
+  var pendentes = DB.pedidos.filter(function(p){return p.status==='Pendente';});
+  if(pendentes.length === 0) { toast('Nenhum pedido pendente!','warn'); return; }
+  pendentes.sort(function(a,b){return a.data_entrega.localeCompare(b.data_entrega);});
+  var totalCx = pendentes.reduce(function(s,p){return s+p.quantidade;},0);
+  var totalKg = pendentes.reduce(function(s,p){return s+(p.quantidade_kg||0);},0);
+
+  // Group by fruta
+  var byFruta = {};
+  pendentes.forEach(function(p){
+    if(!byFruta[p.fruta]) byFruta[p.fruta] = {cx:0,kg:0,pedidos:[]};
+    byFruta[p.fruta].cx += p.quantidade;
+    byFruta[p.fruta].kg += p.quantidade_kg||0;
+    byFruta[p.fruta].pedidos.push(p);
+  });
+
+  var resumoFruta = Object.keys(byFruta).map(function(f){
+    return '<tr><td style="font-weight:700">'+f+'</td><td>'+byFruta[f].cx+' cx</td><td style="color:#f97316;font-weight:700">'+byFruta[f].kg.toFixed(0)+' kg</td><td>'+byFruta[f].pedidos.length+' pedido(s)</td></tr>';
+  }).join('');
+
+  var rows = pendentes.map(function(p, i){
+    var atrasado = p.data_entrega < today();
+    return '<tr style="'+(atrasado?'background:#fff5f5;':i%2===0?'':'background:#f9f9f9;')+'">'
+      +'<td style="font-weight:700;color:'+(atrasado?'#ef4444':'#111')+';">'+(i+1)+'</td>'
+      +'<td style="font-weight:700">'+p.cliente_nome+'</td>'
+      +'<td style="font-weight:700;color:#f97316;">'+p.fruta+'</td>'
+      +'<td style="text-align:center;">'+p.quantidade+' cx</td>'
+      +'<td style="text-align:center;font-weight:700;color:#f97316;">'+(p.quantidade_kg||0).toFixed(0)+' kg</td>'
+      +'<td>'+p.mercadoria_nome+'</td>'
+      +'<td>'+p.bancas+'</td>'
+      +'<td style="color:'+(atrasado?'#ef4444':'#111')+';font-weight:'+(atrasado?'700':'400')+';">'
+      +fmtDate(p.data_entrega)+(atrasado?' ⚠️ ATRASADO':'')+'</td>'
+      +'<td>'+(p.obs||'-')+'</td>'
+      +'</tr>';
+  }).join('');
+
+  var html = '<div class="pt">🏭 Relatório de Produção — Pedidos Pendentes</div>'
+    +'<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:10px;margin-bottom:14px;font-size:12px;">'
+    +'<strong>Data/hora:</strong> '+new Date().toLocaleString('pt-BR')
+    +' &nbsp;|&nbsp; <strong>'+pendentes.length+' pedidos pendentes</strong>'
+    +' &nbsp;|&nbsp; <strong>'+totalCx+' caixas</strong>'
+    +' &nbsp;|&nbsp; <strong style="color:#f97316;">'+totalKg.toFixed(0)+' kg</strong>'
+    +'</div>'
+    +'<div class="sec"><h3>Resumo por Fruta</h3>'
+    +'<table><tr><th>Fruta</th><th>Total Caixas</th><th>Total KG</th><th>Pedidos</th></tr>'+resumoFruta+'</table></div>'
+    +'<div class="sec"><h3>Pedidos a Produzir (ordenados por entrega)</h3>'
+    +'<table><tr><th>#</th><th>Cliente</th><th>Fruta</th><th>Qtd</th><th>KG</th><th>Mercadoria</th><th>Bancas/Calibre</th><th>Entrega</th><th>Obs</th></tr>'
+    +rows+'</table></div>'
+    +'<div style="margin-top:20px;padding:10px;border:1px dashed #ccc;border-radius:6px;">'
+    +'<strong>Conferência:</strong> ________ &nbsp;&nbsp;&nbsp; <strong>Responsável:</strong> ________________________ &nbsp;&nbsp;&nbsp; <strong>Assinatura:</strong> ________________________'
+    +'</div>';
+  abrirJanelaImpressao('Relatório de Produção', html);
 }
 
 

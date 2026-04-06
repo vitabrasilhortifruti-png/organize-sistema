@@ -319,6 +319,36 @@ crudRoutes('clientes',       ['nome','contato','email','endereco']);
 crudRoutes('entradas',       ['lote','fruta','fornecedor_id','tipo','quantidade','quantidade_atual','peso_unitario','total_kg','data','obs','status']);
 crudRoutes('pedidos',        ['cliente_id','cliente_nome','fruta','mercadoria_id','mercadoria_nome','peso_unitario','quantidade','quantidade_kg','valor','data_pedido','data_entrega','bancas','lotes','obs','status']);
 
+// ── CUSTOM DELETE VENDA: restaura estoque se tiver lote ──
+app.delete('/api/vendas/:id/completo', auth, async (req, res) => {
+  const venda = await db.get('SELECT * FROM vendas WHERE id = ?', req.params.id);
+  if(!venda) return res.status(404).json({ erro: 'Venda não encontrada' });
+  // If venda has pedido_id, restore stock via pedido route logic
+  if(venda.pedido_id) {
+    const ped = await db.get('SELECT * FROM pedidos WHERE id = ?', venda.pedido_id);
+    if(ped && ped.lotes && ped.status === 'Atendido') {
+      const loteParts = ped.lotes.split(',');
+      for(const part of loteParts) {
+        const m = part.trim().match(/^(.+?)\((\d+)cx\/(\d+)kg\)$/) || part.trim().match(/^(.+?)\((\d+)\)$/);
+        if(m) {
+          const loteName = m[1].trim();
+          const qtdUsada = parseInt(m[2]);
+          const entrada = await db.get('SELECT * FROM entradas WHERE lote = ?', loteName);
+          if(entrada) {
+            const novoSaldo = (entrada.quantidade_atual || 0) + qtdUsada;
+            await db.run('UPDATE entradas SET quantidade_atual = ?, status = ? WHERE lote = ?',
+              novoSaldo, novoSaldo > 0 ? 'disponivel' : 'esgotado', loteName);
+          }
+        }
+      }
+      await db.run('UPDATE pedidos SET status = ? WHERE id = ?', 'Pendente', venda.pedido_id);
+    }
+  }
+  await db.run('DELETE FROM vendas WHERE id = ?', req.params.id);
+  fazerBackup('del-venda-completo');
+  res.json({ ok: true });
+});
+
 // ── CUSTOM DELETE PEDIDO: restaura estoque + exclui venda ──
 // Override the generic delete for pedidos
 app.delete('/api/pedidos/:id/completo', auth, async (req, res) => {
