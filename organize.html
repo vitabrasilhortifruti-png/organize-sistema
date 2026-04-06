@@ -191,18 +191,18 @@ label.lbl{font-size:11px;color:var(--sub);display:block;margin-bottom:5px;font-w
       </div>
     </div>
     <nav id="nav">
-      <button class="nb active" onclick="goTo('dashboard')">📊 Dashboard</button>
-      <button class="nb" onclick="goTo('empresa')">🏢 Empresa</button>
-      <button class="nb" onclick="goTo('produtos')">📦 Produtos</button>
-      <button class="nb" onclick="goTo('cadastros')">👥 Cadastros</button>
+      ${CURRENT_USER && CURRENT_USER.acesso !== 'visualizador' ? `<button class="nb active" onclick="goTo('dashboard')">📊 Dashboard</button>` : ''}
+      ${CURRENT_USER && CURRENT_USER.acesso !== 'visualizador' ? `<button class="nb" onclick="goTo('empresa')">🏢 Empresa</button>` : ''}
+      ${CURRENT_USER && CURRENT_USER.acesso !== 'visualizador' ? `<button class="nb" onclick="goTo('produtos')">📦 Produtos</button>` : ''}
+      ${CURRENT_USER && CURRENT_USER.acesso !== 'visualizador' ? `<button class="nb" onclick="goTo('cadastros')">👥 Cadastros</button>` : ''}
       <button class="nb" onclick="goTo('entrada')">⬇️ Entrada</button>
-      <button class="nb" onclick="goTo('pedidos')">📋 Pedidos</button>
-      <button class="nb" onclick="goTo('romaneio')">🚚 Romaneio</button>
-      <button class="nb" onclick="goTo('vendas')">💰 Vendas</button>
-      <button class="nb" onclick="goTo('caixas')">📫 Caixas</button>
+      ${CURRENT_USER && CURRENT_USER.acesso !== 'visualizador' ? `<button class="nb" onclick="goTo('pedidos')">📋 Pedidos</button>` : ''}
+      ${CURRENT_USER && CURRENT_USER.acesso !== 'visualizador' ? `<button class="nb" onclick="goTo('romaneio')">🚚 Romaneio</button>` : ''}
+      ${CURRENT_USER && CURRENT_USER.acesso !== 'visualizador' ? `<button class="nb" onclick="goTo('vendas')">💰 Vendas</button>` : ''}
+      ${CURRENT_USER && CURRENT_USER.acesso !== 'visualizador' ? `<button class="nb" onclick="goTo('caixas')">📫 Caixas</button>` : ''}
       <button class="nb" onclick="goTo('estoque')">📈 Estoque</button>
-      <button class="nb" onclick="goTo('financeiro')">💳 Financeiro</button>
-      <button class="nb" onclick="goTo('relatorios')">🗂️ Relatórios</button>
+      ${CURRENT_USER && CURRENT_USER.acesso !== 'visualizador' ? `<button class="nb" onclick="goTo('financeiro')">💳 Financeiro</button>` : ''}
+      ${CURRENT_USER && CURRENT_USER.acesso !== 'visualizador' ? `<button class="nb" onclick="goTo('relatorios')">🗂️ Relatórios</button>` : ''}
     </nav>
   </header>
   <main id="content"></main>
@@ -387,7 +387,11 @@ async function loginSubmit() {
   document.getElementById('usr-nome').textContent = CURRENT_USER.nome || CURRENT_USER.email;
 
   await loadAllData();
-  goTo('dashboard');
+  if (CURRENT_USER && CURRENT_USER.acesso === 'visualizador') {
+    goTo('entrada');
+  } else {
+    goTo('dashboard');
+  }
 }
 
 async function logout() {
@@ -438,6 +442,12 @@ async function criarPrimeiroUsuario() {
 // ═══════════════════════════════════════════════════════
 let currentPage = 'dashboard';
 function goTo(page) {
+  // Visualizador can only see entrada and estoque
+  if (CURRENT_USER && CURRENT_USER.acesso === 'visualizador') {
+    if (page !== 'entrada' && page !== 'estoque') {
+      page = 'entrada';
+    }
+  }
   currentPage = page;
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
   const btns = document.querySelectorAll('.nb');
@@ -482,12 +492,31 @@ function getLotesDisponiveis(fruta) {
   return DB.entradas.filter(e => e.fruta===fruta && (e.quantidade_atual??e.quantidade)>0 && e.status!=='esgotado');
 }
 async function abaterLote(lote_id, unidades) {
-  const e = DB.entradas.find(e=>e.id===lote_id);
+  var e = DB.entradas.find(function(x){return x.id===lote_id;});
   if (!e) return;
-  e.quantidade_atual = Math.max(0, (e.quantidade_atual??e.quantidade) - unidades);
-  const status = e.quantidade_atual === 0 ? 'esgotado' : 'disponivel';
+  var saldoAtual = e.quantidade_atual != null ? e.quantidade_atual : e.quantidade;
+  e.quantidade_atual = Math.max(0, saldoAtual - unidades);
+  var status = e.quantidade_atual === 0 ? 'esgotado' : 'disponivel';
   e.status = status;
-  await PATCH(`/api/entradas/${lote_id}/saldo`, {quantidade_atual: e.quantidade_atual, status});
+  // Always track in KG: quantidade_atual_kg = unidades * peso_unitario
+  var pesoUn = e.peso_unitario || 1;
+  var kgAbatido = unidades * pesoUn;
+  await PATCH('/api/entradas/'+lote_id+'/saldo', {
+    quantidade_atual: e.quantidade_atual,
+    status: status,
+    kg_abatido: kgAbatido
+  });
+}
+async function restaurarLote(lote_id, unidades) {
+  var e = DB.entradas.find(function(x){return x.id===lote_id;});
+  if (!e) return;
+  var saldoAtual = e.quantidade_atual != null ? e.quantidade_atual : e.quantidade;
+  e.quantidade_atual = saldoAtual + unidades;
+  e.status = 'disponivel';
+  await PATCH('/api/entradas/'+lote_id+'/saldo', {
+    quantidade_atual: e.quantidade_atual,
+    status: 'disponivel'
+  });
 }
 async function restaurarLote(lote_id, unidades) {
   const e = DB.entradas.find(e=>e.id===lote_id);
@@ -782,6 +811,31 @@ function renderCliTab(div) {
   </div>`).join('')||'<div class="empty">Nenhum cliente</div>'}
   </div></div>`;
 }
+
+function modalTrocarSenha(uid, unome) {
+  modal('<div class="section-title">🔑 Alterar Senha — '+unome+'</div>'
+    +'<div style="margin-bottom:10px;"><label class="lbl">Nova Senha</label>'
+    +'<input class="inp" id="ns-senha" type="password" placeholder="Mínimo 6 caracteres"></div>'
+    +'<div style="margin-bottom:14px;"><label class="lbl">Confirmar Senha</label>'
+    +'<input class="inp" id="ns-conf" type="password" placeholder="Repita a senha"></div>'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button class="btn btn-p" data-uid="'+uid+'" onclick="salvarNovaSenha(this.dataset.uid)">💾 Salvar</button>'
+    +'<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+    +'</div>');
+}
+
+async function salvarNovaSenha(uid) {
+  var senha = (document.getElementById('ns-senha')||{}).value || '';
+  var conf = (document.getElementById('ns-conf')||{}).value || '';
+  if(!senha || senha.length < 6) return toast('Senha: mínimo 6 caracteres','err');
+  if(senha !== conf) return toast('Senhas não coincidem','err');
+  var res = await PUT('/api/usuarios/'+uid+'/senha', {senha: senha});
+  if(res) {
+    closeModal();
+    toast('✅ Senha alterada com sucesso!');
+  }
+}
+
 function renderUsrTab(div) {
   if(!isAdmin()) { div.innerHTML='<div class="card"><div class="empty">Acesso restrito.</div></div>'; return; }
   div.innerHTML=`<div class="grid2">
@@ -809,7 +863,10 @@ function renderUsrTab(div) {
         <div style="font-size:10px;color:var(--muted)">${u.email}</div>
         <span class="badge badge-${u.acesso}" style="margin-top:3px;">${u.acesso}</span>
       </div>
-      <button class="btn btn-r btn-sm" onclick="delUsuario('${u.id}')"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button>
+      <div style="display:flex;gap:5px;">
+        <button class="btn btn-s btn-sm" data-uid="${u.id}" data-unome="${u.nome}" onclick="modalTrocarSenha(this.dataset.uid,this.dataset.unome)" title="Alterar senha">🔑</button>
+        ${u.email.toLowerCase() === 'nildomoraesagro@gmail.com' ? '<span style="font-size:10px;color:var(--muted);padding:5px;">🔒</span>' : `<button class="btn btn-r btn-sm" onclick="delUsuario('${u.id}')"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button>`}
+      </div>
     </div>`).join('')||'<div class="empty">Nenhum usuário</div>'}
   </div></div>`;
 }
@@ -848,9 +905,26 @@ async function addUsuario() {
     renderCadastros(); switchCadastro('usuarios');
   }
 }
+
+async function modalAlterarSenha(userId, userName) {
+  modal('<div class="section-title">🔑 Alterar Senha — '+userName+'</div>'
+    +'<div style="margin-bottom:10px;"><label class="lbl">Nova Senha</label>'
+    +'<input class="inp" id="nova-senha" type="password" placeholder="Mínimo 6 caracteres"></div>'
+    +'<div style="margin-bottom:16px;"><label class="lbl">Confirmar Senha</label>'
+    +'<input class="inp" id="conf-senha" type="password" placeholder="Repita a senha"></div>'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button class="btn btn-p" data-uid="'+userId+'" onclick="salvarNovaSenha(this.dataset.uid)">💾 Salvar</button>'
+    +'<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+    +'</div>');
+}
+
+
 async function delUsuario(id) {
   var u = DB.usuarios.find(function(x){return x.id===id;});
   if(!u) return;
+  if(u.email.toLowerCase() === 'nildomoraesagro@gmail.com') {
+    return toast('⚠️ Este usuário não pode ser excluído.', 'err');
+  }
   if(!confirm('Excluir usuário "'+u.nome+'" ('+u.email+')? Esta ação não pode ser desfeita.')) return;
   var res = await DEL('/api/usuarios/'+id);
   if(!res) return;
@@ -1196,7 +1270,9 @@ async function confirmarAtenderPedido(id) {
   var kgTotal = 0;
   cbs.forEach(function(cb) {
     var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
-    kgTotal += (parseInt(qtdEl ? qtdEl.value : 0)||0) * parseFloat(cb.dataset.peso);
+    var qtdUsada = parseInt(qtdEl ? qtdEl.value : 0)||0;
+    var pesoUn = parseFloat(cb.dataset.peso) || 1;
+    kgTotal += qtdUsada * pesoUn; // sempre unidades × peso = KG
   });
 
   var venda = {id:uid(),cliente_id:p.cliente_id,cliente:p.cliente_nome,fruta:p.fruta,quantidade:p.quantidade,quantidade_kg:kgTotal,valor:(p.valor||0)*p.quantidade,data:today(),pedido_id:p.id,origem:'pedido'};
@@ -1287,8 +1363,19 @@ async function atenderPedido(id) {
   if(res){ DB.vendas.unshift(res); toast('✓ Pedido atendido e venda gerada!'); renderPedidos(); }
 }
 async function delPedido(id) {
-  if(!await DEL(`/api/pedidos/${id}`)) return;
-  DB.pedidos=DB.pedidos.filter(x=>x.id!==id); toast('Pedido removido'); renderPedidos();
+  var p = DB.pedidos.find(function(x){return x.id===id;});
+  if(!p) return;
+  var msg = 'Excluir pedido de '+p.cliente_nome+'?';
+  if(p.status === 'Atendido') msg += '\nAtenção: o estoque será restaurado e a venda vinculada será excluída.';
+  if(!confirm(msg)) return;
+  var res = await DEL('/api/pedidos/'+id+'/completo');
+  if(!res) return;
+  DB.pedidos = DB.pedidos.filter(function(x){return x.id!==id;});
+  DB.vendas = DB.vendas.filter(function(v){return v.pedido_id !== id;});
+  // Reload entradas to reflect restored stock
+  await loadAllData();
+  toast('✅ Pedido excluído. Estoque restaurado.');
+  renderPedidos();
 }
 
 // ═══════════════════════════════════════════════════════

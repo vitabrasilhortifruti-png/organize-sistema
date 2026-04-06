@@ -192,13 +192,45 @@ app.post('/api/usuarios', async (req, res) => {
 });
 
 app.delete('/api/usuarios/:id', authAdmin, async (req, res) => {
+  // Protect master admin
+  const target = await db.get('SELECT email FROM usuarios WHERE id = ?', req.params.id);
+  if (target && target.email.toLowerCase() === 'nildomoraesagro@gmail.com') {
+    return res.status(403).json({ erro: 'Este usuário não pode ser excluído.' });
+  }
   // Remove all sessions for this user
   for (const [token, sess] of sessions.entries()) {
     if (sess.id === req.params.id) sessions.delete(token);
   }
-  // Fully delete the user record
   await db.run('DELETE FROM usuarios WHERE id = ?', req.params.id);
   fazerBackup('del-usuario');
+  res.json({ ok: true });
+});
+
+// ── CHANGE PASSWORD ──────────────────────────────────────
+app.patch('/api/usuarios/:id/senha', authAdmin, async (req, res) => {
+  const { senha } = req.body;
+  if (!senha || senha.length < 6) return res.status(400).json({ erro: 'Senha: mínimo 6 caracteres' });
+  await db.run('UPDATE usuarios SET senha = ? WHERE id = ?', hashSenha(senha), req.params.id);
+  // Invalidate sessions for this user
+  for (const [token, sess] of sessions.entries()) {
+    if (sess.id === req.params.id) sessions.delete(token);
+  }
+  fazerBackup('senha-usuario');
+  res.json({ ok: true });
+});
+
+// ── TROCAR SENHA (admin pode trocar de qualquer usuário) ──
+app.put('/api/usuarios/:id/senha', authAdmin, async (req, res) => {
+  const { senha } = req.body;
+  if (!senha || senha.length < 6) return res.status(400).json({ erro: 'Senha: mínimo 6 caracteres' });
+  const usr = await db.get('SELECT id FROM usuarios WHERE id = ?', req.params.id);
+  if (!usr) return res.status(404).json({ erro: 'Usuário não encontrado' });
+  await db.run('UPDATE usuarios SET senha = ? WHERE id = ?', hashSenha(senha), req.params.id);
+  // Invalidate all sessions for this user (force re-login)
+  for (const [token, sess] of sessions.entries()) {
+    if (sess.id === req.params.id) sessions.delete(token);
+  }
+  fazerBackup('troca-senha');
   res.json({ ok: true });
 });
 
@@ -246,11 +278,85 @@ function crudRoutes(tabela, campos) {
   });
 }
 
+// ── DELETE PEDIDO (com restauração de estoque e exclusão de venda) ──
+app.delete('/api/pedidos/:id', auth, async (req, res) => {
+  if (!['admin','gerente'].includes(req.usuario.acesso)) return res.status(403).json({ erro: 'Sem permissão' });
+  const pedido = await db.get('SELECT * FROM pedidos WHERE id = ?', req.params.id);
+  if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado' });
+
+  // If already attended, restore stock from lotes
+  if (pedido.status === 'Atendido' && pedido.lotes && pedido.lotes !== 'A definir pela produção') {
+    // Parse lotes: "LOTE01(50), LOTE02(30)" or "LOTE01, LOTE02"
+    const partes = pedido.lotes.split(',').map(s => s.trim());
+    for (const parte of partes) {
+      const matchQtd = parte.match(/^(.+?)\((\d+)\)$/);
+      const loteCod = matchQtd ? matchQtd[1].trim() : parte;
+      const qtdUsada = matchQtd ? parseInt(matchQtd[2]) : pedido.quantidade;
+      if (loteCod && qtdUsada > 0) {
+        const lote = await db.get('SELECT * FROM entradas WHERE lote = ?', loteCod);
+        if (lote) {
+          const novoSaldo = (lote.quantidade_atual || lote.quantidade) + qtdUsada;
+          const novoStatus = novoSaldo > 0 ? 'disponivel' : lote.status;
+          await db.run('UPDATE entradas SET quantidade_atual = ?, status = ? WHERE id = ?',
+            novoSaldo, novoStatus, lote.id);
+        }
+      }
+    }
+  }
+
+  // Delete linked venda
+  await db.run("DELETE FROM vendas WHERE pedido_id = ?", pedido.id);
+
+  // Delete pedido
+  await db.run('DELETE FROM pedidos WHERE id = ?', req.params.id);
+  fazerBackup('del-pedido');
+  res.json({ ok: true });
+});
+
 crudRoutes('produtos',       ['codigo','nome','tipo','peso']);
 crudRoutes('fornecedores',   ['nome','contato','email']);
 crudRoutes('clientes',       ['nome','contato','email','endereco']);
 crudRoutes('entradas',       ['lote','fruta','fornecedor_id','tipo','quantidade','quantidade_atual','peso_unitario','total_kg','data','obs','status']);
 crudRoutes('pedidos',        ['cliente_id','cliente_nome','fruta','mercadoria_id','mercadoria_nome','peso_unitario','quantidade','quantidade_kg','valor','data_pedido','data_entrega','bancas','lotes','obs','status']);
+
+// ── CUSTOM DELETE PEDIDO: restaura estoque + exclui venda ──
+// Override the generic delete for pedidos
+app.delete('/api/pedidos/:id/completo', auth, async (req, res) => {
+  if (!['admin','gerente','operador'].includes(req.usuario.acesso))
+    return res.status(403).json({ erro: 'Sem permissão' });
+  
+  const pedido = await db.get('SELECT * FROM pedidos WHERE id = ?', req.params.id);
+  if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado' });
+
+  // 1. Restore stock if pedido was Atendido and has lotes
+  if (pedido.status === 'Atendido' && pedido.lotes && pedido.lotes !== 'A definir pela produção') {
+    // Parse lotes: format "LOTE01(50), LOTE02(30)" or "LOTE01, LOTE02"
+    const loteParts = pedido.lotes.split(',');
+    for (const part of loteParts) {
+      const m = part.trim().match(/^(.+?)\((\d+)\)$/);
+      if (m) {
+        const loteName = m[1].trim();
+        const qtdUsada = parseInt(m[2]);
+        const entrada = await db.get('SELECT * FROM entradas WHERE lote = ?', loteName);
+        if (entrada) {
+          const novoSaldo = (entrada.quantidade_atual || 0) + qtdUsada;
+          const novoStatus = novoSaldo > 0 ? 'disponivel' : 'esgotado';
+          await db.run('UPDATE entradas SET quantidade_atual = ?, status = ? WHERE lote = ?',
+            novoSaldo, novoStatus, loteName);
+        }
+      }
+    }
+  }
+
+  // 2. Delete linked venda
+  await db.run('DELETE FROM vendas WHERE pedido_id = ?', req.params.id);
+
+  // 3. Delete the pedido
+  await db.run('DELETE FROM pedidos WHERE id = ?', req.params.id);
+  
+  fazerBackup('del-pedido-completo');
+  res.json({ ok: true });
+});
 crudRoutes('romaneios',      ['numero','pedido_id','cliente_nome','fruta','motorista','placa','caixas','qualidade','obs','data']);
 crudRoutes('vendas',         ['cliente_id','cliente','fruta','quantidade','quantidade_kg','valor','data','pedido_id','origem']);
 crudRoutes('retornos_caixa', ['cliente_id','data','quantidade','marca','obs']);
