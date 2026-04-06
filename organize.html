@@ -1179,7 +1179,7 @@ async function modalAtenderPedido(id) {
         + '<input type="checkbox" class="lat-cb" value="'+l.id+'" data-lote="'+l.lote+'" data-peso="'+(l.peso_unitario||1)+'" data-saldo="'+saldo+'" style="accent-color:var(--accent);width:15px;height:15px;" onchange="autoFillQtdLote(this)">'
         + '<div style="flex:1;">'
         + '<div style="font-size:12px;font-weight:700;color:var(--text)">'+l.lote+' — '+l.fruta+'</div>'
-        + '<div style="font-size:10px;color:var(--muted)">Saldo: '+saldo+' unid. | '+(saldo*(p.peso_unitario||l.peso_unitario||1)).toFixed(1)+' kg ('+p.peso_unitario+'kg/cx)</div>'
+        + '<div style="font-size:10px;color:var(--muted)">Saldo: '+saldo+' unid. | '+(saldo*(parseFloat(p.peso_unitario)||parseFloat(l.peso_unitario)||1)).toFixed(1)+' kg ('+p.peso_unitario+'kg/cx)</div>'
         + '</div>'
         + '<div><label style="font-size:10px;color:var(--sub);">Qtd usada:</label>'
         + '<input type="number" class="inp lat-qtd" data-id="'+l.id+'" min="1" max="'+saldo+'" placeholder="0" style="width:70px;padding:4px 6px;font-size:11px;" oninput="atualizarResumoAtender()"></div>'
@@ -1243,9 +1243,12 @@ function atualizarResumoAtender() {
   cbs.forEach(function(cb) {
     var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
     var qtd = parseInt(qtdEl ? qtdEl.value : 0)||0;
-    var kg = qtd * parseFloat(cb.dataset.peso);
+    // Use pedido peso (window._atenderPedidoId) for correct kg display
+    var pedidoParaResumo = DB.pedidos.find(function(x){return x.id===window._atenderPedidoId;});
+    var pesoParaResumo = pedidoParaResumo ? parseFloat(pedidoParaResumo.peso_unitario) || 1 : parseFloat(cb.dataset.peso) || 1;
+    var kg = qtd * pesoParaResumo;
     total += kg;
-    if(qtd>0) resumo.push(cb.dataset.lote+': '+qtd+' unid. ('+kg.toFixed(1)+' kg)');
+    if(qtd>0) resumo.push(cb.dataset.lote+': '+qtd+' cx × '+pesoParaResumo+'kg = '+kg.toFixed(1)+' kg');
   });
   var el = document.getElementById('lat-resumo');
   if(el) el.innerHTML = resumo.length > 0 
@@ -1261,7 +1264,8 @@ async function confirmarAtenderPedido(id) {
 
   var lotesUsados = [];
   // Use pedido peso_unitario for correct kg calculation
-  var pesoPorCaixa = p.peso_unitario || 1;
+  var pesoPorCaixa = parseFloat(p.peso_unitario) || parseFloat(p.quantidade_kg / p.quantidade) || 1;
+  console.log('Pedido peso_unitario:', p.peso_unitario, 'pesoPorCaixa:', pesoPorCaixa, 'qtd:', p.quantidade, 'kg:', p.quantidade_kg);
   for(var i=0; i<cbs.length; i++) {
     var cb = cbs[i];
     var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
@@ -1284,7 +1288,7 @@ async function confirmarAtenderPedido(id) {
     var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
     var qtdUsada = parseInt(qtdEl ? qtdEl.value : 0)||0;
     // Use pedido peso_unitario (not lote peso) for correct kg
-    kgTotal += qtdUsada * pesoPorCaixa;
+    kgTotal += qtdUsada * parseFloat(pesoPorCaixa);
   });
 
   var venda = {id:uid(),cliente_id:p.cliente_id,cliente:p.cliente_nome,fruta:p.fruta,quantidade:p.quantidade,quantidade_kg:kgTotal,valor:(p.valor||0)*p.quantidade,data:today(),pedido_id:p.id,origem:'pedido'};
