@@ -494,13 +494,20 @@ function getLotesDisponiveis(fruta) {
 async function abaterLote(lote_id, unidades) {
   var e = DB.entradas.find(function(x){return x.id===lote_id;});
   if (!e) return;
+  var pesoUn = e.peso_unitario || 1;
+  await abaterLoteKg(lote_id, unidades, pesoUn);
+}
+
+async function abaterLoteKg(lote_id, unidades, pesoUnitario) {
+  var e = DB.entradas.find(function(x){return x.id===lote_id;});
+  if (!e) return;
   var saldoAtual = e.quantidade_atual != null ? e.quantidade_atual : e.quantidade;
+  // Abate in units (caixas/sacos)
   e.quantidade_atual = Math.max(0, saldoAtual - unidades);
   var status = e.quantidade_atual === 0 ? 'esgotado' : 'disponivel';
   e.status = status;
-  // Always track in KG: quantidade_atual_kg = unidades * peso_unitario
-  var pesoUn = e.peso_unitario || 1;
-  var kgAbatido = unidades * pesoUn;
+  // KG abatido = qtd × peso unitário do PEDIDO (não do lote)
+  var kgAbatido = unidades * (pesoUnitario || e.peso_unitario || 1);
   await PATCH('/api/entradas/'+lote_id+'/saldo', {
     quantidade_atual: e.quantidade_atual,
     status: status,
@@ -1172,7 +1179,7 @@ async function modalAtenderPedido(id) {
         + '<input type="checkbox" class="lat-cb" value="'+l.id+'" data-lote="'+l.lote+'" data-peso="'+(l.peso_unitario||1)+'" data-saldo="'+saldo+'" style="accent-color:var(--accent);width:15px;height:15px;" onchange="autoFillQtdLote(this)">'
         + '<div style="flex:1;">'
         + '<div style="font-size:12px;font-weight:700;color:var(--text)">'+l.lote+' — '+l.fruta+'</div>'
-        + '<div style="font-size:10px;color:var(--muted)">Saldo: '+saldo+' unid. | '+(saldo*(l.peso_unitario||1)).toFixed(1)+' kg</div>'
+        + '<div style="font-size:10px;color:var(--muted)">Saldo: '+saldo+' unid. | '+(saldo*(p.peso_unitario||l.peso_unitario||1)).toFixed(1)+' kg ('+p.peso_unitario+'kg/cx)</div>'
         + '</div>'
         + '<div><label style="font-size:10px;color:var(--sub);">Qtd usada:</label>'
         + '<input type="number" class="inp lat-qtd" data-id="'+l.id+'" min="1" max="'+saldo+'" placeholder="0" style="width:70px;padding:4px 6px;font-size:11px;" oninput="atualizarResumoAtender()"></div>'
@@ -1253,14 +1260,19 @@ async function confirmarAtenderPedido(id) {
   if(cbs.length===0) return toast('Selecione ao menos um lote','err');
 
   var lotesUsados = [];
+  // Use pedido peso_unitario for correct kg calculation
+  var pesoPorCaixa = p.peso_unitario || 1;
   for(var i=0; i<cbs.length; i++) {
     var cb = cbs[i];
     var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
     var qtd = parseInt(qtdEl ? qtdEl.value : 0)||0;
     if(qtd<=0) return toast('Informe a quantidade do lote '+cb.dataset.lote,'err');
     if(qtd > parseFloat(cb.dataset.saldo)) return toast('Quantidade maior que saldo do lote '+cb.dataset.lote,'err');
-    await abaterLote(cb.value, qtd);
-    lotesUsados.push(cb.dataset.lote+'('+qtd+')');
+    // abaterLote uses the entrada's peso_unitario internally
+    // but we override with the pedido's peso to ensure correct kg abate
+    await abaterLoteKg(cb.value, qtd, pesoPorCaixa);
+    var kgAbatido = qtd * pesoPorCaixa;
+    lotesUsados.push(cb.dataset.lote+'('+qtd+'cx='+kgAbatido.toFixed(0)+'kg)');
   }
 
   await PUT('/api/pedidos/'+id, {status:'Atendido', lotes: lotesUsados.join(', ')});
@@ -1271,8 +1283,8 @@ async function confirmarAtenderPedido(id) {
   cbs.forEach(function(cb) {
     var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
     var qtdUsada = parseInt(qtdEl ? qtdEl.value : 0)||0;
-    var pesoUn = parseFloat(cb.dataset.peso) || 1;
-    kgTotal += qtdUsada * pesoUn; // sempre unidades × peso = KG
+    // Use pedido peso_unitario (not lote peso) for correct kg
+    kgTotal += qtdUsada * pesoPorCaixa;
   });
 
   var venda = {id:uid(),cliente_id:p.cliente_id,cliente:p.cliente_nome,fruta:p.fruta,quantidade:p.quantidade,quantidade_kg:kgTotal,valor:(p.valor||0)*p.quantidade,data:today(),pedido_id:p.id,origem:'pedido'};
