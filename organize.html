@@ -1189,7 +1189,14 @@ async function modalAtenderPedido(id) {
 
   var prodAtender = DB.produtos.find(function(x){return x.id===p.mercadoria_id;});
   var pesoAtender = prodAtender ? parseFloat(prodAtender.peso) : (parseFloat(p.peso_unitario)||1);
+  // Fallback: use quantidade_kg / quantidade if produto not found
+  if(pesoAtender <= 0 || pesoAtender === 1) {
+    var pCalc = p.quantidade > 0 ? parseFloat(p.quantidade_kg) / p.quantidade : 0;
+    if(pCalc > 1) pesoAtender = pCalc;
+  }
   var kgTotalPedido = p.quantidade * pesoAtender;
+  // Store peso globally so atualizarResumoAtender can use it reliably
+  window._pesoAtenderAtual = pesoAtender;
   var pedBancas = p.bancas ? ' · Destino: '+p.bancas : '';
   modal('<div class="section-title"><i data-lucide="check-circle" style="width:16px;height:16px;color:var(--green);"></i> Atender Pedido — '+p.cliente_nome+'</div>'
     + '<div style="margin-bottom:8px;padding:10px;background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.2);border-radius:8px;font-size:12px;">'
@@ -1244,19 +1251,8 @@ function atualizarResumoAtender() {
   var cbs = document.querySelectorAll('.lat-cb:checked');
   var total = 0;
   var resumo = [];
-  // Get peso from produto (most reliable source)
-  var p = DB.pedidos.find(function(x){return x.id===window._atenderPedidoId;});
-  var pesoParaResumo = 1;
-  if(p) {
-    var prod = DB.produtos.find(function(x){return x.id===p.mercadoria_id;});
-    if(prod && parseFloat(prod.peso) > 0) {
-      pesoParaResumo = parseFloat(prod.peso);
-    } else if(parseFloat(p.peso_unitario) > 0) {
-      pesoParaResumo = parseFloat(p.peso_unitario);
-    } else if(p.quantidade > 0 && parseFloat(p.quantidade_kg) > 0) {
-      pesoParaResumo = parseFloat(p.quantidade_kg) / p.quantidade;
-    }
-  }
+  // Use the peso already calculated when modal opened (most reliable)
+  var pesoParaResumo = window._pesoAtenderAtual || 1;
   cbs.forEach(function(cb) {
     var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
     var qtd = parseInt(qtdEl ? qtdEl.value : 0)||0;
@@ -1276,16 +1272,11 @@ async function confirmarAtenderPedido(id) {
   var cbs = document.querySelectorAll('.lat-cb:checked');
   if(cbs.length===0) return toast('Selecione ao menos um lote','err');
 
-  // ── PESO UNITÁRIO: sempre busca do PRODUTO cadastrado ──
+  // ── PESO UNITÁRIO: usa o valor já calculado no modal ──
+  var pesoPorCaixa = window._pesoAtenderAtual || 1;
+  // Double-check from produto
   var prod = DB.produtos.find(function(x){return x.id===p.mercadoria_id;});
-  var pesoPorCaixa = 1;
-  if(prod && parseFloat(prod.peso) > 0) {
-    pesoPorCaixa = parseFloat(prod.peso);
-  } else if(parseFloat(p.peso_unitario) > 0) {
-    pesoPorCaixa = parseFloat(p.peso_unitario);
-  } else if(p.quantidade > 0 && parseFloat(p.quantidade_kg) > 0) {
-    pesoPorCaixa = parseFloat(p.quantidade_kg) / p.quantidade;
-  }
+  if(prod && parseFloat(prod.peso) > 0) pesoPorCaixa = parseFloat(prod.peso);
 
   var lotesUsados = [];
   for(var i=0; i<cbs.length; i++) {
