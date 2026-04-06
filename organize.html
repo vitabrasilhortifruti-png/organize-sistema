@@ -191,18 +191,18 @@ label.lbl{font-size:11px;color:var(--sub);display:block;margin-bottom:5px;font-w
       </div>
     </div>
     <nav id="nav">
-      ${CURRENT_USER && CURRENT_USER.acesso !== 'visualizador' ? `<button class="nb active" onclick="goTo('dashboard')">📊 Dashboard</button>` : ''}
-      ${CURRENT_USER && CURRENT_USER.acesso !== 'visualizador' ? `<button class="nb" onclick="goTo('empresa')">🏢 Empresa</button>` : ''}
-      ${CURRENT_USER && CURRENT_USER.acesso !== 'visualizador' ? `<button class="nb" onclick="goTo('produtos')">📦 Produtos</button>` : ''}
-      ${CURRENT_USER && CURRENT_USER.acesso !== 'visualizador' ? `<button class="nb" onclick="goTo('cadastros')">👥 Cadastros</button>` : ''}
+      <button class="nb active" onclick="goTo('dashboard')">📊 Dashboard</button>
+      <button class="nb" onclick="goTo('empresa')">🏢 Empresa</button>
+      <button class="nb" onclick="goTo('produtos')">📦 Produtos</button>
+      <button class="nb" onclick="goTo('cadastros')">👥 Cadastros</button>
       <button class="nb" onclick="goTo('entrada')">⬇️ Entrada</button>
-      ${CURRENT_USER && CURRENT_USER.acesso !== 'visualizador' ? `<button class="nb" onclick="goTo('pedidos')">📋 Pedidos</button>` : ''}
-      ${CURRENT_USER && CURRENT_USER.acesso !== 'visualizador' ? `<button class="nb" onclick="goTo('romaneio')">🚚 Romaneio</button>` : ''}
-      ${CURRENT_USER && CURRENT_USER.acesso !== 'visualizador' ? `<button class="nb" onclick="goTo('vendas')">💰 Vendas</button>` : ''}
-      ${CURRENT_USER && CURRENT_USER.acesso !== 'visualizador' ? `<button class="nb" onclick="goTo('caixas')">📫 Caixas</button>` : ''}
+      <button class="nb" onclick="goTo('pedidos')">📋 Pedidos</button>
+      <button class="nb" onclick="goTo('romaneio')">🚚 Romaneio</button>
+      <button class="nb" onclick="goTo('vendas')">💰 Vendas</button>
+      <button class="nb" onclick="goTo('caixas')">📫 Caixas</button>
       <button class="nb" onclick="goTo('estoque')">📈 Estoque</button>
-      ${CURRENT_USER && CURRENT_USER.acesso !== 'visualizador' ? `<button class="nb" onclick="goTo('financeiro')">💳 Financeiro</button>` : ''}
-      ${CURRENT_USER && CURRENT_USER.acesso !== 'visualizador' ? `<button class="nb" onclick="goTo('relatorios')">🗂️ Relatórios</button>` : ''}
+      <button class="nb" onclick="goTo('financeiro')">💳 Financeiro</button>
+      <button class="nb" onclick="goTo('relatorios')">🗂️ Relatórios</button>
     </nav>
   </header>
   <main id="content"></main>
@@ -1777,6 +1777,22 @@ async function carregarBackups() {
 // ═══════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════
+
+function aplicarPermissoesNav() {
+  var nav = document.getElementById('nav');
+  if(!nav || !CURRENT_USER) return;
+  var btns = nav.querySelectorAll('.nb');
+  // indices: 0=dashboard,1=empresa,2=produtos,3=cadastros,4=entrada,5=pedidos,6=romaneio,7=vendas,8=caixas,9=estoque,10=financeiro,11=relatorios
+  var allowedVis = [4, 9]; // visualizador: apenas entrada e estoque
+  btns.forEach(function(btn, i) {
+    if(CURRENT_USER.acesso === 'visualizador') {
+      btn.style.display = allowedVis.indexOf(i) !== -1 ? '' : 'none';
+    } else {
+      btn.style.display = '';
+    }
+  });
+}
+
 async function init() {
   // Verificar se há usuários cadastrados
   try {
@@ -1803,7 +1819,8 @@ async function init() {
         me.acesso==='admin'?'👑 ADMIN':me.acesso==='gerente'?'⭐ GERENTE':me.acesso==='operador'?'🔧 OPERADOR':'👁 VISUALIZADOR';
       document.getElementById('usr-nome').textContent = me.nome || me.email;
       await loadAllData();
-      goTo('dashboard');
+      aplicarPermissoesNav();
+      goTo(CURRENT_USER.acesso === 'visualizador' ? 'entrada' : 'dashboard');
       return;
     }
   }
