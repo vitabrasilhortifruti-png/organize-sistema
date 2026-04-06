@@ -849,9 +849,14 @@ async function addUsuario() {
   }
 }
 async function delUsuario(id) {
-  if(!confirm('Remover este usuário?')) return;
-  if(!await DEL(`/api/usuarios/${id}`)) return;
-  DB.usuarios=DB.usuarios.filter(u=>u.id!==id); renderCadastros(); switchCadastro('usuarios');
+  var u = DB.usuarios.find(function(x){return x.id===id;});
+  if(!u) return;
+  if(!confirm('Excluir usuário "'+u.nome+'" ('+u.email+')? Esta ação não pode ser desfeita.')) return;
+  var res = await DEL('/api/usuarios/'+id);
+  if(!res) return;
+  DB.usuarios=DB.usuarios.filter(function(x){return x.id!==id;});
+  toast('✅ Usuário '+u.nome+' excluído!');
+  renderCadastros(); switchCadastro('usuarios');
 }
 
 // ═══════════════════════════════════════════════════════
@@ -890,14 +895,17 @@ function renderEntrada() {
       const forn=DB.fornecedores.find(f=>f.id===e.fornecedor_id);
       const saldo=e.quantidade_atual??e.quantidade;
       return`<tr>
-        <td><span class="badge bo">${e.lote}</span></td>
-        <td style="color:var(--text);font-weight:600">${e.fruta}</td>
+        <td><span class="badge bo" style="cursor:pointer;" onclick="abrirDetalheEntrada('${e.id}')" title="Detalhes do lote">🔍 ${e.lote}</span></td>
+        <td style="color:var(--text);font-weight:600;cursor:pointer;" onclick="abrirDetalheEntrada('${e.id}')">${e.fruta}</td>
         <td>${forn ? forn.nome : '-'}</td>
         <td>${e.quantidade}</td>
         <td><strong style="color:${saldo>0?'var(--green)':'var(--red)'}">${saldo}</strong></td>
         <td>${(e.total_kg||0).toFixed(1)} kg</td>
         <td>${fmtDate(e.data)}</td>
-        <td><button class="btn btn-r btn-sm" onclick="delEntrada('${e.id}')"><i data-lucide="trash-2" style="width:12px;height:12px;"></i></button></td>
+        <td style="display:flex;gap:4px;">
+          <button class="btn btn-s btn-sm" onclick="abrirDetalheEntrada('${e.id}')" title="Detalhes">🔍</button>
+          <button class="btn btn-r btn-sm" onclick="delEntrada('${e.id}')"><i data-lucide="trash-2" style="width:12px;height:12px;"></i></button>
+        </td>
       </tr>`;
     }).join('')||'<tr><td colspan="8" class="empty">Nenhuma entrada</td></tr>'}
     </tbody></table></div>
@@ -1063,7 +1071,7 @@ async function addPedido() {
   const valor=parseFloat(document.getElementById('ped-valor').value)||0;
   const dataPed=document.getElementById('ped-data-ped').value;
   const dataEnt=document.getElementById('ped-data-ent').value;
-  const bancas=Array.from(document.querySelectorAll('.banca-cb:checked')).map(c=>c.value).join(', ');
+  const bancas=Array.from(document.querySelectorAll('#bancas-chk .banca-cb:checked')).map(c=>c.value).join(', ');
   const obs=document.getElementById('ped-obs').value;
   if(!cliId||!fruta||!mercId||!qtd||!dataPed||!dataEnt) return toast('Preencha todos os campos obrigatórios','err');
   if(!bancas) return toast('Selecione ao menos uma banca','err');
@@ -1505,12 +1513,15 @@ function renderEstoque() {
     <div class="section-title">Detalhamento por Lote</div>
     <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Lote</th><th>Fruta</th><th>Fornecedor</th><th>Data</th><th>Original</th><th>Saldo</th><th>KG</th><th>Status</th></tr></thead><tbody>
     ${saldos.map(s=>`<tr>
-      <td><span class="badge bo">${s.lote}</span></td>
-      <td style="color:var(--text);font-weight:600">${s.fruta}</td>
+      <td><span class="badge bo" style="cursor:pointer;" onclick="abrirDetalheEntrada('${s.id}')" title="Ver detalhes">🔍 ${s.lote}</span></td>
+      <td style="color:var(--text);font-weight:600;cursor:pointer;" onclick="abrirDetalheEntrada('${s.id}')">${s.fruta}</td>
       <td>${s.forn_nome}</td><td>${fmtDate(s.data)}</td><td>${s.quantidade}</td>
       <td><strong style="color:${s.saldo>0?'var(--green)':'var(--red)'}">${s.saldo}</strong></td>
       <td><strong style="color:${s.saldo>0?'var(--accent)':'var(--muted)'}">${s.kg.toFixed(1)} kg</strong></td>
-      <td><span class="badge ${s.saldo>0?'bg':'br'}">${s.saldo>0?'✓ Disponível':'✗ Esgotado'}</span></td>
+      <td style="display:flex;gap:4px;align-items:center;">
+        <span class="badge ${s.saldo>0?'bg':'br'}">${s.saldo>0?'✓ Disponível':'✗ Esgotado'}</span>
+        <button class="btn btn-s btn-sm" onclick="abrirDetalheEntrada('${s.id}')" title="Detalhes">🔍</button>
+      </td>
     </tr>`).join('')||'<tr><td colspan="8" class="empty">Nenhum lote</td></tr>'}
     </tbody></table></div>
   </div>`;
@@ -1827,14 +1838,17 @@ var itemExtraCount = 0;
 function atualizarBancaItem(sel) {
   var fruta = sel.value;
   var usaBanca = FRUTAS_BANCA.indexOf(fruta) !== -1;
-  var container = sel.closest('div').parentElement;
-  var bancaSel = container.querySelector('.item-banca');
-  var bancaLabel = container.querySelector('.item-banca-label');
-  if(!bancaSel) return;
+  var container = sel.closest('div').parentElement.parentElement;
+  // Find the bancas grid and label within this item container
+  var bancaGrid = container.querySelector('[class*="item-bancas-grid"]');
+  var bancaLabel = container.querySelector('[class*="item-banca-label"]');
+  if(!bancaGrid) return;
   var opcoes = usaBanca ? BANCAS_LISTA : (fruta ? CALIBRES_LISTA : BANCAS_LISTA);
-  var labelTxt = usaBanca ? 'Bancas' : (fruta ? 'Calibre' : 'Bancas');
+  var labelTxt = usaBanca ? 'Bancas de Destino' : (fruta ? 'Calibre' : 'Bancas / Calibre');
   if(bancaLabel) bancaLabel.textContent = labelTxt;
-  bancaSel.innerHTML = opcoes.map(function(o){return '<option>'+o+'</option>';}).join('');
+  bancaGrid.innerHTML = opcoes.map(function(o){
+    return '<label class="chk-lbl" style="padding:4px 7px;font-size:10px;"><input type="checkbox" value="'+o+'" class="item-banca-cb"> '+o+'</label>';
+  }).join('');
 }
 
 function removerItemExtra(n) {
@@ -1850,18 +1864,20 @@ function addItemExtra() {
   var frutas = ['LARANJA','PERA','LIMA TAITI','ABACATE','REPOLHO','CENOURA','MEXERICA POKAN'];
   var frutaOpts = frutas.map(function(f){ return '<option>'+f+'</option>'; }).join('');
   var mercOpts = DB.produtos.map(function(p){ return '<option value="'+p.id+'" data-peso="'+p.peso+'">'+p.nome+'</option>'; }).join('');
-  var bancaOpts = BANCAS_LISTA.map(function(b){return '<option>'+b+'</option>';}).join('');
+  var bancaHTML = BANCAS_LISTA.map(function(b){
+    return '<label class="chk-lbl" style="padding:4px 7px;font-size:10px;"><input type="checkbox" value="'+b+'" class="item-banca-cb"> '+b+'</label>';
+  }).join('');
   div.innerHTML = '<div style="display:flex;justify-content:space-between;margin-bottom:8px;">'
     + '<span style="font-size:11px;font-weight:700;color:var(--accent);">Item Extra '+n+'</span>'
     + '<button class="btn btn-r btn-sm" onclick="removerItemExtra('+n+')">✕ Remover</button>'
     + '</div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">'
     + '<div><label class="lbl">Fruta</label><select class="inp item-fruta" onchange="atualizarBancaItem(this)">'+frutaOpts+'</select></div>'
     + '<div><label class="lbl">Mercadoria</label><select class="inp item-merc">'+mercOpts+'</select></div>'
     + '<div><label class="lbl">Quantidade</label><input type="number" class="inp item-qtd" placeholder="0" min="1"></div>'
-    + '<div><label class="lbl item-banca-label">Bancas</label>'
-    + '<select class="inp item-banca" multiple style="height:60px;font-size:10px;">'+bancaOpts+'</select></div>'
-    + '</div>';
+    + '</div>'
+    + '<div><label class="lbl item-banca-label-'+n+'">Bancas de Destino</label>'
+    + '<div class="chk-grid item-bancas-grid-'+n+'" style="margin-top:4px;">'+bancaHTML+'</div></div>';
   document.getElementById('itens-extras').appendChild(div);
 }
 
@@ -2058,6 +2074,171 @@ function imprimirRelatorio() {
     + '</table></div>';
   abrirJanelaImpressao('Relatório Geral', html);
 }
+
+
+// ═══════════════════════════════════════════════════════
+// DETALHE DO LOTE (Entradas / Estoque)
+// ═══════════════════════════════════════════════════════
+function exportarExcelLote(loteId) {
+  var e = DB.entradas.find(function(x){return x.id===loteId;});
+  if(!e) return;
+  var pedidos = DB.pedidos.filter(function(p){
+    if(!p.lotes) return false;
+    return p.lotes.indexOf(e.lote) !== -1;
+  });
+  var saldo = e.quantidade_atual != null ? e.quantidade_atual : e.quantidade;
+  var totalUsado = e.quantidade - saldo;
+  var totalKgUsado = totalUsado * (e.peso_unitario || 1);
+
+  // Build CSV
+  var csv = 'Lote;Fruta;Fornecedor;Data;Qtd Original;Qtd Usada;Saldo;KG Original;KG Usado;KG Saldo\n';
+  var forn = DB.fornecedores.find(function(f){return f.id===e.fornecedor_id;});
+  csv += e.lote+';'+e.fruta+';'+(forn?forn.nome:'-')+';'+e.data+';'+e.quantidade+';'+totalUsado+';'+saldo+';'+(e.total_kg||0).toFixed(1)+';'+totalKgUsado.toFixed(1)+';'+(saldo*(e.peso_unitario||1)).toFixed(1)+'\n\n';
+  csv += 'Pedidos vinculados ao lote\n';
+  csv += 'Cliente;Fruta;Quantidade;Valor Unit;Valor Total;Data Pedido;Data Entrega;Status;Lotes\n';
+  pedidos.forEach(function(p){
+    csv += p.cliente_nome+';'+p.fruta+';'+p.quantidade+';'+((p.valor||0).toFixed(2))+';'+((p.valor||0)*p.quantidade).toFixed(2)+';'+p.data_pedido+';'+p.data_entrega+';'+p.status+';'+p.lotes+'\n';
+  });
+
+  var blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'lote_'+e.lote+'_'+e.fruta+'.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('✅ Excel exportado!');
+}
+
+function imprimirDetalheEntrada(loteId) {
+  var e = DB.entradas.find(function(x){return x.id===loteId;});
+  if(!e) return;
+  var forn = DB.fornecedores.find(function(f){return f.id===e.fornecedor_id;});
+  var pedidos = DB.pedidos.filter(function(p){return p.lotes && p.lotes.indexOf(e.lote) !== -1;});
+  var saldo = e.quantidade_atual != null ? e.quantidade_atual : e.quantidade;
+  var totalUsado = e.quantidade - saldo;
+  var kgOrig = e.total_kg || 0;
+  var kgUsado = totalUsado * (e.peso_unitario || 1);
+  var kgSaldo = saldo * (e.peso_unitario || 1);
+  var totalValor = pedidos.reduce(function(s,p){return s+(p.valor||0)*p.quantidade;},0);
+
+  var pedRows = pedidos.map(function(p){
+    return '<tr><td>'+p.cliente_nome+'</td><td>'+p.fruta+'</td><td>'+p.quantidade+'</td>'
+      +'<td>R$ '+((p.valor||0).toFixed(2))+'</td>'
+      +'<td style="color:#f97316;font-weight:700;">R$ '+((p.valor||0)*p.quantidade).toFixed(2)+'</td>'
+      +'<td>'+p.data_pedido+'</td><td>'+p.data_entrega+'</td>'
+      +'<td><span style="background:'+(p.status==='Atendido'?'#d1fae5':'#fef3c7')+';color:'+(p.status==='Atendido'?'#065f46':'#92400e')+';padding:2px 7px;border-radius:10px;font-size:10px;">'+p.status+'</span></td>'
+      +'</tr>';
+  }).join('') || '<tr><td colspan="8" style="text-align:center;color:#999;padding:12px;">Nenhum pedido vinculado a este lote</td></tr>';
+
+  var html = '<div class="pt">📦 Detalhes do Lote — '+e.lote+'</div>'
+    +'<div class="sec"><h3>Informações do Lote</h3><div class="row">'
+    +'<div class="fld"><div class="lbl">Lote</div><div class="val" style="color:#f97316;">'+e.lote+'</div></div>'
+    +'<div class="fld"><div class="lbl">Fruta</div><div class="val">'+e.fruta+'</div></div>'
+    +'<div class="fld"><div class="lbl">Fornecedor</div><div class="val">'+(forn?forn.nome:'-')+'</div></div>'
+    +'<div class="fld"><div class="lbl">Data Entrada</div><div class="val">'+fmtDate(e.data)+'</div></div>'
+    +'</div><div class="row">'
+    +'<div class="fld"><div class="lbl">Qtd Original</div><div class="val">'+e.quantidade+' un</div></div>'
+    +'<div class="fld"><div class="lbl">Qtd Usada</div><div class="val" style="color:#ef4444;">'+totalUsado+' un</div></div>'
+    +'<div class="fld"><div class="lbl">Saldo</div><div class="val" style="color:'+(saldo>0?'#10b981':'#ef4444')+';">'+saldo+' un</div></div>'
+    +'<div class="fld"><div class="lbl">Peso/un</div><div class="val">'+(e.peso_unitario||1)+' kg</div></div>'
+    +'</div><div class="row">'
+    +'<div class="fld"><div class="lbl">KG Original</div><div class="val">'+kgOrig.toFixed(1)+' kg</div></div>'
+    +'<div class="fld"><div class="lbl">KG Usado</div><div class="val" style="color:#ef4444;">'+kgUsado.toFixed(1)+' kg</div></div>'
+    +'<div class="fld"><div class="lbl">KG Saldo</div><div class="val" style="color:'+(kgSaldo>0?'#10b981':'#ef4444')+';">'+kgSaldo.toFixed(1)+' kg</div></div>'
+    +'<div class="fld"><div class="lbl">Valor Total Pedidos</div><div class="val" style="color:#f97316;font-size:14px;">R$ '+totalValor.toFixed(2)+'</div></div>'
+    +'</div></div>'
+    +'<div class="sec"><h3>Pedidos Vinculados ('+pedidos.length+')</h3>'
+    +'<table><tr><th>Cliente</th><th>Fruta</th><th>Qtd</th><th>Unit.</th><th>Total</th><th>Data Ped.</th><th>Entrega</th><th>Status</th></tr>'
+    +pedRows+'</table></div>';
+
+  abrirJanelaImpressao('Lote '+e.lote+' — '+e.fruta, html);
+}
+
+function abrirDetalheEntrada(loteId) {
+  var e = DB.entradas.find(function(x){return x.id===loteId;});
+  if(!e) return;
+  var forn = DB.fornecedores.find(function(f){return f.id===e.fornecedor_id;});
+  var pedidos = DB.pedidos.filter(function(p){return p.lotes && p.lotes.indexOf(e.lote) !== -1;});
+  var saldo = e.quantidade_atual != null ? e.quantidade_atual : e.quantidade;
+  var totalUsado = e.quantidade - saldo;
+  var kgOrig = e.total_kg || 0;
+  var kgUsado = totalUsado * (e.peso_unitario || 1);
+  var kgSaldo = saldo * (e.peso_unitario || 1);
+  var totalValorPeds = pedidos.reduce(function(s,p){return s+(p.valor||0)*p.quantidade;},0);
+  var pct = e.quantidade > 0 ? Math.round((totalUsado/e.quantidade)*100) : 0;
+
+  var pedRows = pedidos.length === 0
+    ? '<tr><td colspan="8" class="empty">Nenhum pedido vinculado a este lote</td></tr>'
+    : pedidos.map(function(p){
+        return '<tr style="font-size:11px;">'
+          +'<td style="font-weight:600;color:var(--text)">'+p.cliente_nome+'</td>'
+          +'<td>'+p.fruta+'</td><td>'+p.quantidade+' un</td>'
+          +'<td>R$ '+((p.valor||0).toFixed(2))+'</td>'
+          +'<td style="color:var(--accent);font-weight:700;">R$ '+((p.valor||0)*p.quantidade).toFixed(2)+'</td>'
+          +'<td>'+fmtDate(p.data_pedido)+'</td>'
+          +'<td>'+fmtDate(p.data_entrega)+'</td>'
+          +'<td><span class="badge '+(p.status==='Atendido'?'bg':'by')+'">'+p.status+'</span></td>'
+          +'</tr>';
+      }).join('');
+
+  modal(
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'
+    +'<div class="section-title" style="margin:0;">📦 Lote: <span style="color:var(--accent)">'+e.lote+'</span> — '+e.fruta+'</div>'
+    +'<div style="display:flex;gap:6px;">'
+    +'<button class="btn btn-g btn-sm" data-lid="'+loteId+'" onclick="exportarExcelLote(this.dataset.lid)">📊 Excel</button>'
+    +'<button class="btn btn-p btn-sm" data-lid="'+loteId+'" onclick="imprimirDetalheEntrada(this.dataset.lid)">🖨️ PDF</button>'
+    +'<button class="btn btn-s btn-sm" onclick="closeModal()">✕ Fechar</button>'
+    +'</div></div>'
+
+    // Cards resumo
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">'
+    +'<div style="padding:10px;background:#060a12;border-radius:8px;text-align:center;">'
+    +'<div style="font-size:9px;color:var(--muted);text-transform:uppercase;margin-bottom:3px;">Qtd Original</div>'
+    +'<div style="font-size:18px;font-weight:800;color:var(--text)">'+e.quantidade+'</div>'
+    +'<div style="font-size:9px;color:var(--muted)">'+kgOrig.toFixed(1)+' kg</div>'
+    +'</div>'
+    +'<div style="padding:10px;background:#060a12;border-radius:8px;text-align:center;">'
+    +'<div style="font-size:9px;color:var(--muted);text-transform:uppercase;margin-bottom:3px;">Qtd Usada</div>'
+    +'<div style="font-size:18px;font-weight:800;color:var(--red)">'+totalUsado+'</div>'
+    +'<div style="font-size:9px;color:var(--muted)">'+kgUsado.toFixed(1)+' kg ('+pct+'%)</div>'
+    +'</div>'
+    +'<div style="padding:10px;background:#060a12;border-radius:8px;text-align:center;">'
+    +'<div style="font-size:9px;color:var(--muted);text-transform:uppercase;margin-bottom:3px;">Saldo</div>'
+    +'<div style="font-size:18px;font-weight:800;color:'+(saldo>0?'var(--green)':'var(--red)')+'">'+saldo+'</div>'
+    +'<div style="font-size:9px;color:var(--muted)">'+kgSaldo.toFixed(1)+' kg</div>'
+    +'</div>'
+    +'<div style="padding:10px;background:#060a12;border-radius:8px;text-align:center;">'
+    +'<div style="font-size:9px;color:var(--muted);text-transform:uppercase;margin-bottom:3px;">Valor Pedidos</div>'
+    +'<div style="font-size:15px;font-weight:800;color:var(--accent)">R$ '+totalValorPeds.toFixed(2)+'</div>'
+    +'<div style="font-size:9px;color:var(--muted)">'+pedidos.length+' pedido(s)</div>'
+    +'</div></div>'
+
+    // Barra de uso
+    +'<div style="margin-bottom:14px;">'
+    +'<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--sub);margin-bottom:4px;">'
+    +'<span>Utilização do lote</span><span>'+pct+'% usado</span></div>'
+    +'<div class="pbar" style="height:10px;">'
+    +'<div class="pbar-fill" style="width:'+pct+'%;background:'+(pct>=90?'var(--red)':pct>=70?'var(--yellow)':'var(--green)')+';"></div>'
+    +'</div></div>'
+
+    // Fornecedor info
+    +'<div style="margin-bottom:12px;padding:8px 12px;background:#0d1320;border-radius:8px;font-size:11px;">'
+    +'<span style="color:var(--muted);">Fornecedor: </span><strong style="color:var(--text);">'+(forn?forn.nome:'Não informado')+'</strong>'
+    +' &nbsp;|&nbsp; <span style="color:var(--muted);">Entrada: </span><strong style="color:var(--text);">'+fmtDate(e.data)+'</strong>'
+    +' &nbsp;|&nbsp; <span style="color:var(--muted);">Peso/un: </span><strong style="color:var(--text);">'+(e.peso_unitario||1)+' kg</strong>'
+    +'</div>'
+
+    // Pedidos table
+    +'<div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:6px;">📋 Pedidos vinculados ('+pedidos.length+')</div>'
+    +'<div class="tbl-wrap" style="max-height:220px;overflow-y:auto;">'
+    +'<table class="tbl"><thead><tr>'
+    +'<th>Cliente</th><th>Fruta</th><th>Qtd</th><th>Unit.</th><th>Total</th><th>Data Ped.</th><th>Entrega</th><th>Status</th>'
+    +'</tr></thead><tbody>'+pedRows+'</tbody></table>'
+    +'</div>'
+  );
+}
+
 
 </script>
 </body>
