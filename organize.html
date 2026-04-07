@@ -1312,83 +1312,84 @@ async function modalAtenderPedido(id) {
   var p = DB.pedidos.find(function(x){return x.id===id;});
   if(!p) return;
 
-  // Peso da mercadoria cadastrada (fonte definitiva)
+  // Busca peso do produto cadastrado
   var prod = DB.produtos.find(function(x){return x.id===p.mercadoria_id;});
-  var pesoKgCx = prod && parseFloat(prod.peso) > 0 ? parseFloat(prod.peso) :
-                 parseFloat(p.peso_unitario) > 0 ? parseFloat(p.peso_unitario) :
-                 p.quantidade > 0 && parseFloat(p.quantidade_kg) > 0 ? parseFloat(p.quantidade_kg)/p.quantidade : 1;
-  window._pesoAtenderAtual = pesoKgCx;
-  var kgTotal = p.quantidade * pesoKgCx;
+  var pesoSugerido = 0;
+  if(prod && parseFloat(prod.peso) > 0) pesoSugerido = parseFloat(prod.peso);
+  else if(parseFloat(p.peso_unitario) > 0) pesoSugerido = parseFloat(p.peso_unitario);
+  else if(p.quantidade > 0 && parseFloat(p.quantidade_kg) > 0) pesoSugerido = parseFloat(p.quantidade_kg)/p.quantidade;
+  window._pesoAtenderAtual = pesoSugerido || 1;
 
+  // Lotes com saldo
   var lotes = DB.entradas.filter(function(e){
     return (e.quantidade_atual!=null ? e.quantidade_atual : e.quantidade) > 0;
   });
 
   var lotesHTML = lotes.length===0
-    ? '<div class="empty">Nenhum lote disponível em estoque</div>'
+    ? '<div class="empty">Nenhum lote com saldo disponível</div>'
     : lotes.map(function(l) {
         var saldo = l.quantidade_atual!=null ? l.quantidade_atual : l.quantidade;
-        var saldoKg = saldo * pesoKgCx;
+        var tipoL = (l.tipo||'kg').toLowerCase();
+        var saldoLabel = tipoL==='kg'
+          ? saldo.toFixed(0)+' kg'
+          : saldo+' cx ('+(saldo*(l.peso_unitario||1)).toFixed(0)+' kg)';
         return '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:#0d1320;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">'
-          + '<input type="checkbox" class="lat-cb" value="'+l.id+'" data-lote="'+l.lote+'" data-saldo="'+saldo+'" style="accent-color:var(--accent);width:16px;height:16px;" onchange="autoFillQtdLote(this)">'
-          + '<div style="flex:1;">'
-          + '<div style="font-size:12px;font-weight:700;color:var(--text)">'+l.lote+' — '+l.fruta+'</div>'
-          + (function(){
-            var tipoL = (l.tipo||'kg').toLowerCase();
-            if(tipoL==='kg') {
-              var maxCx = Math.floor(saldo / pesoKgCx);
-              return '<div style="font-size:10px;color:var(--muted);">Saldo: <strong style="color:var(--green)">'+saldo.toFixed(0)+' kg</strong> = <strong style="color:var(--accent)">'+maxCx+' cx</strong> disponíveis ('+pesoKgCx+'kg/cx)</div>';
-            } else {
-              return '<div style="font-size:10px;color:var(--muted);">Saldo: <strong style="color:var(--green)">'+saldo+' cx</strong> = <strong style="color:var(--accent)">'+saldoKg.toFixed(0)+' kg</strong></div>';
-            }
-          })()
-          + '</div>'
-          + '<div style="text-align:center;">'
-          + '<div style="font-size:9px;color:var(--muted);margin-bottom:2px;">Qtd (cx)</div>'
-          + '<input type="number" class="inp lat-qtd" data-id="'+l.id+'" min="1" max="'+saldo+'" placeholder="0" style="width:75px;padding:4px 6px;font-size:12px;text-align:center;" oninput="atualizarResumoAtender()">'
-          + '<div class="lat-kg-show" style="font-size:9px;color:var(--accent);margin-top:2px;" data-id="'+l.id+'">— kg</div>'
-          + '</div></div>';
+          +'<input type="checkbox" class="lat-cb" value="'+l.id+'" data-lote="'+l.lote+'" data-saldo="'+saldo+'" data-tipo="'+tipoL+'" data-pesol="'+(l.peso_unitario||1)+'" style="accent-color:var(--accent);width:16px;height:16px;" onchange="autoFillQtdLote(this)">'
+          +'<div style="flex:1;">'
+          +'<strong style="font-size:12px;color:var(--text)">'+l.lote+'</strong> <span style="font-size:11px;color:var(--muted)">— '+l.fruta+'</span>'
+          +'<div style="font-size:10px;color:var(--sub);margin-top:2px;">Saldo: <strong style="color:var(--green)">'+saldoLabel+'</strong></div>'
+          +'</div>'
+          +'<div style="text-align:center;min-width:90px;">'
+          +'<div style="font-size:9px;color:var(--muted);">Qtd (caixas)</div>'
+          +'<input type="number" class="inp lat-qtd" data-id="'+l.id+'" min="1" placeholder="0" style="width:75px;padding:4px;font-size:12px;text-align:center;" oninput="atualizarResumoAtender()">'
+          +'<div class="lat-kg-show" data-id="'+l.id+'" style="font-size:9px;color:var(--accent);margin-top:2px;">— kg</div>'
+          +'</div></div>';
       }).join('');
 
-  modal('<div class="section-title">✅ Atender Pedido — '+p.cliente_nome+'</div>'
-    + '<div style="margin-bottom:10px;padding:10px;background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.2);border-radius:8px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center;">'
-    + '<div><div style="font-size:9px;color:var(--muted);">FRUTA</div><div style="font-weight:700;color:var(--text)">'+p.fruta+'</div></div>'
-    + '<div><div style="font-size:9px;color:var(--muted);">CAIXAS</div><div style="font-weight:700;color:var(--accent)">'+p.quantidade+' cx</div></div>'
-    + '<div><div style="font-size:9px;color:var(--muted);">PESO/CX</div><div style="font-weight:700;color:var(--accent)">'+pesoKgCx+' kg</div></div>'
-    + '<div><div style="font-size:9px;color:var(--muted);">TOTAL KG</div><div style="font-weight:700;color:var(--green)">'+kgTotal.toFixed(0)+' kg</div></div>'
-    + '</div>'
-    + '<div style="margin-bottom:6px;font-size:11px;color:var(--sub);">Selecione o lote — quantidade preenchida automaticamente em caixas:</div>'
-    + '<div id="lotes-atender" style="max-height:260px;overflow-y:auto;margin-bottom:10px;">'+lotesHTML+'</div>'
-    + '<div id="lat-resumo" style="padding:10px;background:#060a12;border-radius:8px;font-size:12px;color:var(--sub);margin-bottom:12px;">☝️ Selecione um lote acima</div>'
-    + '<div style="display:flex;gap:8px;">'
-    + '<button class="btn btn-g" onclick="confirmarAtenderPedido()">✅ Confirmar Atendimento</button>'
-    + '<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
-    + '</div>');
+  var kgTotalPedido = p.quantidade * window._pesoAtenderAtual;
+  modal(
+    '<div class="section-title">✅ Atender Pedido — '+p.cliente_nome+'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px;">'
+    +'<div style="background:#060a12;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:9px;color:var(--muted);">FRUTA</div><div style="font-weight:700;color:var(--text);font-size:12px;">'+p.fruta+'</div></div>'
+    +'<div style="background:#060a12;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:9px;color:var(--muted);">PEDIDO</div><div style="font-weight:700;color:var(--accent);font-size:12px;">'+p.quantidade+' cx</div></div>'
+    +'<div style="background:#060a12;border-radius:6px;padding:8px;text-align:center;">'
+    +'<div style="font-size:9px;color:var(--muted);">KG / CAIXA</div>'
+    +'<input id="lat-peso-cx" type="number" step="0.1" value="'+window._pesoAtenderAtual+'" style="width:60px;text-align:center;background:transparent;border:1px solid var(--accent);color:var(--accent);font-size:12px;font-weight:700;border-radius:4px;padding:2px;" oninput="window._pesoAtenderAtual=parseFloat(this.value)||1;atualizarResumoAtender()">'
+    +'</div>'
+    +'<div style="background:#060a12;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:9px;color:var(--muted);">TOTAL KG</div><div id="lat-kg-total" style="font-weight:700;color:var(--green);font-size:12px;">'+kgTotalPedido.toFixed(0)+' kg</div></div>'
+    +'</div>'
+    +'<div style="margin-bottom:6px;font-size:11px;color:var(--sub);">Selecione o lote — qtd preenchida automaticamente. Ajuste o kg/cx se necessário:</div>'
+    +'<div id="lotes-atender" style="max-height:250px;overflow-y:auto;margin-bottom:10px;">'+lotesHTML+'</div>'
+    +'<div id="lat-resumo" style="padding:10px;background:#060a12;border-radius:8px;font-size:12px;color:var(--sub);margin-bottom:12px;">☝️ Selecione um lote</div>'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button class="btn btn-g" onclick="confirmarAtenderPedido()">✅ Confirmar Atendimento</button>'
+    +'<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+    +'</div>'
+  );
   lucide.createIcons();
 }
 
 
 function autoFillQtdLote(cb) {
-  if(cb.checked) {
+  var p = DB.pedidos.find(function(x){return x.id===window._atenderPedidoId;});
+  if(cb.checked && p) {
     var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
     if(qtdEl) {
-      var p = DB.pedidos.find(function(x){return x.id===window._atenderPedidoId;});
-      if(p) {
-        var jaAlocado = 0;
-        document.querySelectorAll('.lat-cb:checked').forEach(function(otherCb) {
-          if(otherCb.value !== cb.value) {
-            var oEl = document.querySelector('.lat-qtd[data-id="'+otherCb.value+'"]');
-            jaAlocado += parseInt(oEl ? oEl.value : 0) || 0;
-          }
-        });
-        var restante = Math.max(0, p.quantidade - jaAlocado);
-        var loteEntrada = DB.entradas.find(function(x){return x.id===cb.value;});
-        var tipoL = loteEntrada ? (loteEntrada.tipo||'kg').toLowerCase() : 'kg';
-        var saldoRaw = parseFloat(cb.dataset.saldo) || 0;
-        // For KG lotes: saldo is in KG, convert to max caixas
-        var saldoEmCaixas = tipoL==='kg' ? Math.floor(saldoRaw / (window._pesoAtenderAtual||1)) : saldoRaw;
-        qtdEl.value = Math.min(restante, saldoEmCaixas);
-      }
+      // Calcular quanto já foi alocado nos outros lotes
+      var jaAlocado = 0;
+      document.querySelectorAll('.lat-cb:checked').forEach(function(other) {
+        if(other.value !== cb.value) {
+          var oEl = document.querySelector('.lat-qtd[data-id="'+other.value+'"]');
+          jaAlocado += parseInt(oEl ? oEl.value : 0) || 0;
+        }
+      });
+      var restante = Math.max(0, p.quantidade - jaAlocado);
+      // Para lotes em KG: max caixas = floor(saldo_kg / peso_cx)
+      var tipoL = cb.dataset.tipo || 'kg';
+      var saldo = parseFloat(cb.dataset.saldo) || 0;
+      var peso = window._pesoAtenderAtual || 1;
+      var maxCx = tipoL === 'kg' ? Math.floor(saldo / peso) : saldo;
+      qtdEl.value = Math.min(restante, maxCx);
     }
   } else {
     var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
@@ -1398,113 +1399,126 @@ function autoFillQtdLote(cb) {
 }
 
 function atualizarResumoAtender() {
-  var peso = window._pesoAtenderAtual || 1;
+  var peso = parseFloat((document.getElementById('lat-peso-cx')||{}).value) || window._pesoAtenderAtual || 1;
+  window._pesoAtenderAtual = peso;
+
+  // Atualiza kg total do pedido
+  var p = DB.pedidos.find(function(x){return x.id===window._atenderPedidoId;});
+  if(p) {
+    var kgTotEl = document.getElementById('lat-kg-total');
+    if(kgTotEl) kgTotEl.textContent = (p.quantidade * peso).toFixed(0)+' kg';
+  }
+
   var cbs = document.querySelectorAll('.lat-cb:checked');
   var totalCx = 0, totalKg = 0;
   var resumo = [];
-  // Update per-lote kg display
+
   document.querySelectorAll('.lat-qtd').forEach(function(qtdEl) {
-    var qtd = parseInt(qtdEl.value)||0;
+    var cx = parseInt(qtdEl.value) || 0;
     var kgShow = document.querySelector('.lat-kg-show[data-id="'+qtdEl.dataset.id+'"]');
-    if(kgShow) kgShow.textContent = qtd > 0 ? (qtd*peso).toFixed(0)+' kg' : '— kg';
+    if(kgShow) kgShow.textContent = cx > 0 ? (cx * peso).toFixed(0)+' kg' : '— kg';
   });
+
   cbs.forEach(function(cb) {
     var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
-    var qtd = parseInt(qtdEl ? qtdEl.value : 0)||0;
-    if(qtd > 0) {
-      var kg = qtd * peso;
-      totalCx += qtd; totalKg += kg;
-      resumo.push('<strong>'+cb.dataset.lote+'</strong>: '+qtd+' cx = '+kg.toFixed(0)+' kg');
+    var cx = parseInt(qtdEl ? qtdEl.value : 0) || 0;
+    if(cx > 0) {
+      totalCx += cx;
+      totalKg += cx * peso;
+      resumo.push('<strong>'+cb.dataset.lote+'</strong>: '+cx+' cx = '+(cx*peso).toFixed(0)+' kg');
     }
   });
+
   var el = document.getElementById('lat-resumo');
   if(!el) return;
   if(resumo.length > 0) {
-    el.innerHTML = '<span style="color:var(--green)">✓ '+resumo.join('  +  ')+'</span>'
-      +'<div style="margin-top:6px;font-size:13px;font-weight:800;color:var(--accent)">Total: '+totalCx+' cx × '+peso+'kg = <span style="color:var(--green)">'+totalKg.toFixed(0)+' kg</span></div>';
+    el.innerHTML = resumo.join('  +  ')
+      +'<div style="margin-top:6px;font-size:13px;font-weight:800;border-top:1px solid var(--border);padding-top:6px;">'
+      +'Total: <span style="color:var(--accent)">'+totalCx+' cx</span>'
+      +' × <span style="color:var(--accent)">'+peso+'kg/cx</span>'
+      +' = <span style="color:var(--green)">'+totalKg.toFixed(0)+' kg abatidos do lote</span></div>';
   } else {
     el.innerHTML = '☝️ Selecione um lote acima';
   }
 }
 
-async function confirmarAtenderPedido(idParam) {
-  // Use window._atenderPedidoId as the definitive source
-  var id = window._atenderPedidoId || idParam;
-  if(!id) return toast('Erro: pedido não identificado','err');
+async function confirmarAtenderPedido() {
+  var id = window._atenderPedidoId;
+  if(!id) return toast('Erro: abra o modal novamente','err');
   var p = DB.pedidos.find(function(x){return x.id===id;});
-  if(!p) return toast('Erro: pedido não encontrado','err');
+  if(!p) return toast('Pedido não encontrado','err');
+
   var cbs = document.querySelectorAll('.lat-cb:checked');
   if(cbs.length===0) return toast('Selecione ao menos um lote','err');
 
-  // ── PESO: busca do produto cadastrado (DEFINITIVO) ──
-  var prod = DB.produtos.find(function(x){return x.id===p.mercadoria_id;});
-  var pesoPorCaixa = window._pesoAtenderAtual || 1;
-  if(prod && parseFloat(prod.peso) > 0) {
-    pesoPorCaixa = parseFloat(prod.peso);
-  }
-  // Validate
-  if(pesoPorCaixa <= 0 || pesoPorCaixa === 1) {
-    // Last resort: derive from pedido
-    if(p.quantidade > 0 && parseFloat(p.quantidade_kg) > 1) {
-      pesoPorCaixa = parseFloat(p.quantidade_kg) / p.quantidade;
-    }
-  }
+  // Peso/cx: lê do campo editável no modal (usuario pode corrigir)
+  var pesoCx = parseFloat((document.getElementById('lat-peso-cx')||{}).value) || window._pesoAtenderAtual || 1;
+  if(pesoCx <= 0) return toast('Informe o peso por caixa','err');
 
   var lotesUsados = [];
   for(var i=0; i<cbs.length; i++) {
     var cb = cbs[i];
     var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
-    var qtd = parseInt(qtdEl ? qtdEl.value : 0)||0;
-    if(qtd<=0) return toast('Informe a quantidade do lote '+cb.dataset.lote,'err');
-    var kgAbatido = qtd * pesoPorCaixa;
-    var loteObj = DB.entradas.find(function(x){return x.id===cb.value;});
-    var tipoLote = loteObj ? (loteObj.tipo||'kg').toLowerCase() : 'kg';
-    var saldoLote = parseFloat(cb.dataset.saldo)||0;
-    // Validate: if KG lote, check kgAbatido <= saldo; if CAIXA, check qtd <= saldo
-    if(tipoLote==='kg' && kgAbatido > saldoLote) {
-      return toast('KG insuficiente no lote '+cb.dataset.lote+': precisa '+kgAbatido.toFixed(0)+'kg, tem '+saldoLote.toFixed(0)+'kg','err');
+    var cx = parseInt(qtdEl ? qtdEl.value : 0) || 0;
+    if(cx <= 0) return toast('Informe a quantidade do lote '+cb.dataset.lote,'err');
+
+    var kgAbater = cx * pesoCx;
+    var tipoLote = cb.dataset.tipo || 'kg';
+    var saldo = parseFloat(cb.dataset.saldo) || 0;
+
+    // Validar saldo suficiente
+    if(tipoLote === 'kg') {
+      if(kgAbater > saldo) return toast('Lote '+cb.dataset.lote+': precisa '+kgAbater.toFixed(0)+'kg, saldo '+saldo.toFixed(0)+'kg','err');
+    } else {
+      if(cx > saldo) return toast('Lote '+cb.dataset.lote+': saldo insuficiente em caixas','err');
     }
-    if(tipoLote!=='kg' && qtd > saldoLote) {
-      return toast('Quantidade maior que saldo do lote '+cb.dataset.lote,'err');
+
+    // Abater do lote
+    var e = DB.entradas.find(function(x){return x.id===cb.value;});
+    if(e) {
+      var saldoAtual = e.quantidade_atual != null ? e.quantidade_atual : e.quantidade;
+      var novoSaldo = tipoLote === 'kg'
+        ? Math.max(0, saldoAtual - kgAbater)   // lote em KG → abate em KG
+        : Math.max(0, saldoAtual - cx);          // lote em CAIXA → abate em caixas
+      e.quantidade_atual = novoSaldo;
+      e.status = novoSaldo === 0 ? 'esgotado' : 'disponivel';
+      await PATCH('/api/entradas/'+cb.value+'/saldo', {
+        quantidade_atual: novoSaldo,
+        status: e.status,
+        kg_abatido: kgAbater
+      });
     }
-    await abaterLoteKg(cb.value, qtd, pesoPorCaixa);
-    lotesUsados.push(cb.dataset.lote+'('+qtd+'cx/'+kgAbatido.toFixed(0)+'kg)');
+    lotesUsados.push(cb.dataset.lote+'('+cx+'cx/'+kgAbater.toFixed(0)+'kg)');
   }
 
   var kgTotal = 0;
-  cbs.forEach(function(cb) {
+  document.querySelectorAll('.lat-cb:checked').forEach(function(cb) {
     var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
-    kgTotal += (parseInt(qtdEl ? qtdEl.value : 0)||0) * pesoPorCaixa;
+    kgTotal += (parseInt(qtdEl ? qtdEl.value : 0)||0) * pesoCx;
   });
 
-  await PUT('/api/pedidos/'+id, {status:'Atendido', lotes: lotesUsados.join(', ')});
+  // Atualiza pedido
+  await PUT('/api/pedidos/'+id, {status:'Atendido', lotes: lotesUsados.join(', '), quantidade_kg: kgTotal});
   p.status = 'Atendido';
   p.lotes = lotesUsados.join(', ');
+  p.quantidade_kg = kgTotal;
 
-  var venda = {id:uid(),cliente_id:p.cliente_id,cliente:p.cliente_nome,fruta:p.fruta,quantidade:p.quantidade,quantidade_kg:kgTotal,valor:(p.valor||0)*p.quantidade,data:today(),pedido_id:p.id,origem:'pedido'};
-  var res = await POST('/api/vendas', venda);
-  if(res) DB.vendas.unshift(res);
+  // Cria venda (em caixas, kg registrado)
+  var venda = {id:uid(),cliente_id:p.cliente_id,cliente:p.cliente_nome,fruta:p.fruta,
+    quantidade:p.quantidade, quantidade_kg:kgTotal,
+    valor:(p.valor||0)*p.quantidade, data:today(), pedido_id:p.id, origem:'pedido'};
+  var resV = await POST('/api/vendas', venda);
+  if(resV) DB.vendas.unshift(resV);
 
-  // ── AUTO ROMANEIO ──────────────────────────────────────
-  var numRom = 'ROM-' + Date.now().toString(36).toUpperCase();
-  var romaneio = {
-    id: uid(),
-    numero: numRom,
-    pedido_id: id,
-    cliente_nome: p.cliente_nome,
-    fruta: p.fruta,
-    motorista: '',
-    placa: '',
-    caixas: p.quantidade,
-    qualidade: '',
-    obs: 'Gerado automaticamente ao atender pedido',
-    data: today()
-  };
-  var resRom = await POST('/api/romaneios', romaneio);
-  if(resRom) DB.romaneios.unshift(resRom);
+  // Auto romaneio
+  var numRom = 'ROM-'+Date.now().toString(36).toUpperCase();
+  var resR = await POST('/api/romaneios', {id:uid(),numero:numRom,pedido_id:id,
+    cliente_nome:p.cliente_nome,fruta:p.fruta,motorista:'',placa:'',
+    caixas:p.quantidade,obs:'Auto',data:today()});
+  if(resR) DB.romaneios.unshift(resR);
 
   closeModal();
-  toast('✅ Pedido atendido! Romaneio '+numRom+' criado. '+qtd_total_text(cbs, pesoPorCaixa));
+  toast('✅ Atendido! '+kgTotal.toFixed(0)+'kg abatidos do lote. Romaneio: '+numRom);
   await loadAllData();
   renderPedidos();
 }
