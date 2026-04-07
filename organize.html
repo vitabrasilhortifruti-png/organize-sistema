@@ -1336,9 +1336,10 @@ async function modalAtenderPedido(id) {
           + (function(){
             var tipoL = (l.tipo||'kg').toLowerCase();
             if(tipoL==='kg') {
-              return '<div style="font-size:10px;color:var(--muted);">Saldo: <strong style="color:var(--green)">'+saldo.toFixed(0)+' kg</strong> disponível</div>';
+              var maxCx = Math.floor(saldo / pesoKgCx);
+              return '<div style="font-size:10px;color:var(--muted);">Saldo: <strong style="color:var(--green)">'+saldo.toFixed(0)+' kg</strong> = <strong style="color:var(--accent)">'+maxCx+' cx</strong> disponíveis ('+pesoKgCx+'kg/cx)</div>';
             } else {
-              return '<div style="font-size:10px;color:var(--muted);">Saldo: <strong style="color:var(--green)">'+saldo+' '+tipoL+'</strong> = <strong style="color:var(--accent)">'+saldoKg.toFixed(0)+' kg</strong> ('+pesoKgCx+'kg/'+tipoL+')</div>';
+              return '<div style="font-size:10px;color:var(--muted);">Saldo: <strong style="color:var(--green)">'+saldo+' cx</strong> = <strong style="color:var(--accent)">'+saldoKg.toFixed(0)+' kg</strong></div>';
             }
           })()
           + '</div>'
@@ -1381,8 +1382,12 @@ function autoFillQtdLote(cb) {
           }
         });
         var restante = Math.max(0, p.quantidade - jaAlocado);
-        var saldo = parseInt(cb.dataset.saldo) || 0;
-        qtdEl.value = Math.min(restante, saldo);
+        var loteEntrada = DB.entradas.find(function(x){return x.id===cb.value;});
+        var tipoL = loteEntrada ? (loteEntrada.tipo||'kg').toLowerCase() : 'kg';
+        var saldoRaw = parseFloat(cb.dataset.saldo) || 0;
+        // For KG lotes: saldo is in KG, convert to max caixas
+        var saldoEmCaixas = tipoL==='kg' ? Math.floor(saldoRaw / (window._pesoAtenderAtual||1)) : saldoRaw;
+        qtdEl.value = Math.min(restante, saldoEmCaixas);
       }
     }
   } else {
@@ -1422,17 +1427,28 @@ function atualizarResumoAtender() {
   }
 }
 
-async function confirmarAtenderPedido(id) {
+async function confirmarAtenderPedido(idParam) {
+  // Use window._atenderPedidoId as the definitive source
+  var id = window._atenderPedidoId || idParam;
+  if(!id) return toast('Erro: pedido não identificado','err');
   var p = DB.pedidos.find(function(x){return x.id===id;});
-  if(!p) return;
+  if(!p) return toast('Erro: pedido não encontrado','err');
   var cbs = document.querySelectorAll('.lat-cb:checked');
   if(cbs.length===0) return toast('Selecione ao menos um lote','err');
 
-  // ── PESO UNITÁRIO: usa o valor já calculado no modal ──
-  var pesoPorCaixa = window._pesoAtenderAtual || 1;
-  // Double-check from produto
+  // ── PESO: busca do produto cadastrado (DEFINITIVO) ──
   var prod = DB.produtos.find(function(x){return x.id===p.mercadoria_id;});
-  if(prod && parseFloat(prod.peso) > 0) pesoPorCaixa = parseFloat(prod.peso);
+  var pesoPorCaixa = window._pesoAtenderAtual || 1;
+  if(prod && parseFloat(prod.peso) > 0) {
+    pesoPorCaixa = parseFloat(prod.peso);
+  }
+  // Validate
+  if(pesoPorCaixa <= 0 || pesoPorCaixa === 1) {
+    // Last resort: derive from pedido
+    if(p.quantidade > 0 && parseFloat(p.quantidade_kg) > 1) {
+      pesoPorCaixa = parseFloat(p.quantidade_kg) / p.quantidade;
+    }
+  }
 
   var lotesUsados = [];
   for(var i=0; i<cbs.length; i++) {
@@ -1440,8 +1456,17 @@ async function confirmarAtenderPedido(id) {
     var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
     var qtd = parseInt(qtdEl ? qtdEl.value : 0)||0;
     if(qtd<=0) return toast('Informe a quantidade do lote '+cb.dataset.lote,'err');
-    if(qtd > parseFloat(cb.dataset.saldo)) return toast('Quantidade maior que saldo do lote '+cb.dataset.lote,'err');
     var kgAbatido = qtd * pesoPorCaixa;
+    var loteObj = DB.entradas.find(function(x){return x.id===cb.value;});
+    var tipoLote = loteObj ? (loteObj.tipo||'kg').toLowerCase() : 'kg';
+    var saldoLote = parseFloat(cb.dataset.saldo)||0;
+    // Validate: if KG lote, check kgAbatido <= saldo; if CAIXA, check qtd <= saldo
+    if(tipoLote==='kg' && kgAbatido > saldoLote) {
+      return toast('KG insuficiente no lote '+cb.dataset.lote+': precisa '+kgAbatido.toFixed(0)+'kg, tem '+saldoLote.toFixed(0)+'kg','err');
+    }
+    if(tipoLote!=='kg' && qtd > saldoLote) {
+      return toast('Quantidade maior que saldo do lote '+cb.dataset.lote,'err');
+    }
     await abaterLoteKg(cb.value, qtd, pesoPorCaixa);
     lotesUsados.push(cb.dataset.lote+'('+qtd+'cx/'+kgAbatido.toFixed(0)+'kg)');
   }

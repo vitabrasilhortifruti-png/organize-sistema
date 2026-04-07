@@ -401,13 +401,16 @@ app.delete('/api/vendas/:id/completo', auth, async (req, res) => {
     if (pedido && pedido.lotes && pedido.lotes !== 'A definir pela produção') {
       const parts = pedido.lotes.split(',');
       for (const part of parts) {
-        const m = part.trim().match(/^(.+?)\((\d+)(?:cx\/?(\d+)?kg?)?\)$/);
+        const m = part.trim().match(/^(.+?)\((\d+)cx\/(\d+)kg\)$/) || part.trim().match(/^(.+?)\((\d+)\)$/);
         if (m) {
           const loteName = m[1].trim();
-          const qtd = parseInt(m[2]);
+          const qtdCx = parseInt(m[2]);
+          const kgUsado = m[3] ? parseInt(m[3]) : qtdCx;
           const entrada = await db.get('SELECT * FROM entradas WHERE lote = ?', loteName);
           if (entrada) {
-            const novoSaldo = (entrada.quantidade_atual || 0) + qtd;
+            const tipoLote = (entrada.tipo || 'kg').toLowerCase();
+            const restoreQty = tipoLote === 'kg' ? kgUsado : qtdCx;
+            const novoSaldo = (entrada.quantidade_atual || 0) + restoreQty;
             await db.run('UPDATE entradas SET quantidade_atual = ?, status = ? WHERE lote = ?',
               novoSaldo, novoSaldo > 0 ? 'disponivel' : 'esgotado', loteName);
           }
