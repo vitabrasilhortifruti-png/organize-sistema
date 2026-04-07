@@ -1402,12 +1402,10 @@ function atualizarResumoAtender() {
   var peso = parseFloat((document.getElementById('lat-peso-cx')||{}).value) || window._pesoAtenderAtual || 1;
   window._pesoAtenderAtual = peso;
 
-  // Atualiza kg total do pedido
   var p = DB.pedidos.find(function(x){return x.id===window._atenderPedidoId;});
-  if(p) {
-    var kgTotEl = document.getElementById('lat-kg-total');
-    if(kgTotEl) kgTotEl.textContent = (p.quantidade * peso).toFixed(0)+' kg';
-  }
+  var kgPedido = p ? p.quantidade * peso : 0;
+  var kgTotEl = document.getElementById('lat-kg-total');
+  if(kgTotEl) kgTotEl.textContent = kgPedido.toFixed(0)+' kg';
 
   var cbs = document.querySelectorAll('.lat-cb:checked');
   var totalCx = 0, totalKg = 0;
@@ -1416,29 +1414,45 @@ function atualizarResumoAtender() {
   document.querySelectorAll('.lat-qtd').forEach(function(qtdEl) {
     var cx = parseInt(qtdEl.value) || 0;
     var kgShow = document.querySelector('.lat-kg-show[data-id="'+qtdEl.dataset.id+'"]');
-    if(kgShow) kgShow.textContent = cx > 0 ? (cx * peso).toFixed(0)+' kg' : '— kg';
+    if(kgShow) kgShow.textContent = cx > 0 ? (cx*peso).toFixed(0)+' kg' : '— kg';
   });
 
   cbs.forEach(function(cb) {
     var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
     var cx = parseInt(qtdEl ? qtdEl.value : 0) || 0;
     if(cx > 0) {
-      totalCx += cx;
-      totalKg += cx * peso;
+      totalCx += cx; totalKg += cx * peso;
       resumo.push('<strong>'+cb.dataset.lote+'</strong>: '+cx+' cx = '+(cx*peso).toFixed(0)+' kg');
     }
   });
 
   var el = document.getElementById('lat-resumo');
   if(!el) return;
+
+  var faltaKg = kgPedido - totalKg;
+  var suficiente = totalKg >= kgPedido && totalKg > 0;
+
   if(resumo.length > 0) {
+    var cor = suficiente ? 'var(--green)' : 'var(--yellow)';
+    var alerta = suficiente
+      ? '<span style="color:var(--green)">✅ Estoque suficiente para atender o pedido</span>'
+      : '<span style="color:var(--yellow)">⚠️ Faltam '+faltaKg.toFixed(0)+' kg ('+Math.ceil(faltaKg/peso)+' cx) — selecione mais lotes ou registre nova entrada</span>';
     el.innerHTML = resumo.join('  +  ')
-      +'<div style="margin-top:6px;font-size:13px;font-weight:800;border-top:1px solid var(--border);padding-top:6px;">'
-      +'Total: <span style="color:var(--accent)">'+totalCx+' cx</span>'
-      +' × <span style="color:var(--accent)">'+peso+'kg/cx</span>'
-      +' = <span style="color:var(--green)">'+totalKg.toFixed(0)+' kg abatidos do lote</span></div>';
+      +'<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border);font-size:12px;font-weight:700;">'
+      +'Total: <span style="color:var(--accent)">'+totalCx+' cx × '+peso+'kg = <span style="color:'+cor+'">'+totalKg.toFixed(0)+' kg</span></span>'
+      +' / <span style="color:var(--sub)">Pedido: '+kgPedido.toFixed(0)+' kg</span></div>'
+      +'<div style="margin-top:4px;">'+alerta+'</div>';
   } else {
-    el.innerHTML = '☝️ Selecione um lote acima';
+    // Show total available in all lotes
+    var kgTotal = DB.entradas.reduce(function(s,e){
+      var s2 = e.quantidade_atual!=null?e.quantidade_atual:e.quantidade;
+      var tipo = (e.tipo||'kg').toLowerCase();
+      return s + (tipo==='kg' ? s2 : s2*(e.peso_unitario||1));
+    },0);
+    var temSuficiente = kgTotal >= kgPedido;
+    el.innerHTML = '☝️ Selecione um lote acima'
+      +'<div style="margin-top:4px;font-size:10px;color:var(--muted);">Estoque total: <strong style="color:'+(temSuficiente?'var(--green)':'var(--red)')+'">'+kgTotal.toFixed(0)+' kg</strong> disponível | Pedido precisa: <strong>'+kgPedido.toFixed(0)+' kg</strong>'
+      +(temSuficiente?'':' — <span style="color:var(--red)">⚠️ ESTOQUE INSUFICIENTE — registre nova entrada</span>')+'</div>';
   }
 }
 
@@ -1451,66 +1465,72 @@ async function confirmarAtenderPedido() {
   var cbs = document.querySelectorAll('.lat-cb:checked');
   if(cbs.length===0) return toast('Selecione ao menos um lote','err');
 
-  // Peso/cx: lê do campo editável no modal (usuario pode corrigir)
   var pesoCx = parseFloat((document.getElementById('lat-peso-cx')||{}).value) || window._pesoAtenderAtual || 1;
   if(pesoCx <= 0) return toast('Informe o peso por caixa','err');
+
+  // ── VALIDAR: kg total selecionado deve cobrir o pedido ──
+  var kgPedido = p.quantidade * pesoCx;
+  var kgSelecionado = 0;
+  var cxSelecionado = 0;
+  for(var vi=0; vi<cbs.length; vi++) {
+    var cbv = cbs[vi];
+    var qtdElv = document.querySelector('.lat-qtd[data-id="'+cbv.value+'"]');
+    var cxv = parseInt(qtdElv ? qtdElv.value : 0) || 0;
+    kgSelecionado += cxv * pesoCx;
+    cxSelecionado += cxv;
+  }
+  if(cxSelecionado <= 0) return toast('Informe a quantidade em ao menos um lote','err');
+  if(kgSelecionado < kgPedido) {
+    var faltaKg = kgPedido - kgSelecionado;
+    var faltaCx = Math.ceil(faltaKg / pesoCx);
+    return toast('⚠️ Estoque insuficiente! Faltam '+faltaKg.toFixed(0)+' kg ('+faltaCx+' cx). Selecione mais lotes ou registre uma nova entrada.','err');
+  }
 
   var lotesUsados = [];
   for(var i=0; i<cbs.length; i++) {
     var cb = cbs[i];
     var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
     var cx = parseInt(qtdEl ? qtdEl.value : 0) || 0;
-    if(cx <= 0) return toast('Informe a quantidade do lote '+cb.dataset.lote,'err');
+    if(cx <= 0) continue;
 
     var kgAbater = cx * pesoCx;
     var tipoLote = cb.dataset.tipo || 'kg';
     var saldo = parseFloat(cb.dataset.saldo) || 0;
 
-    // Validar saldo suficiente
     if(tipoLote === 'kg') {
       if(kgAbater > saldo) return toast('Lote '+cb.dataset.lote+': precisa '+kgAbater.toFixed(0)+'kg, saldo '+saldo.toFixed(0)+'kg','err');
     } else {
-      if(cx > saldo) return toast('Lote '+cb.dataset.lote+': saldo insuficiente em caixas','err');
+      if(cx > saldo) return toast('Lote '+cb.dataset.lote+': saldo insuficiente','err');
     }
 
-    // Abater do lote
     var e = DB.entradas.find(function(x){return x.id===cb.value;});
     if(e) {
       var saldoAtual = e.quantidade_atual != null ? e.quantidade_atual : e.quantidade;
       var novoSaldo = tipoLote === 'kg'
-        ? Math.max(0, saldoAtual - kgAbater)   // lote em KG → abate em KG
-        : Math.max(0, saldoAtual - cx);          // lote em CAIXA → abate em caixas
+        ? Math.max(0, saldoAtual - kgAbater)
+        : Math.max(0, saldoAtual - cx);
       e.quantidade_atual = novoSaldo;
       e.status = novoSaldo === 0 ? 'esgotado' : 'disponivel';
       await PATCH('/api/entradas/'+cb.value+'/saldo', {
-        quantidade_atual: novoSaldo,
-        status: e.status,
-        kg_abatido: kgAbater
+        quantidade_atual: novoSaldo, status: e.status, kg_abatido: kgAbater
       });
     }
     lotesUsados.push(cb.dataset.lote+'('+cx+'cx/'+kgAbater.toFixed(0)+'kg)');
   }
 
-  var kgTotal = 0;
-  document.querySelectorAll('.lat-cb:checked').forEach(function(cb) {
-    var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
-    kgTotal += (parseInt(qtdEl ? qtdEl.value : 0)||0) * pesoCx;
-  });
+  var kgTotal = cxSelecionado * pesoCx;
 
-  // Atualiza pedido
   await PUT('/api/pedidos/'+id, {status:'Atendido', lotes: lotesUsados.join(', '), quantidade_kg: kgTotal});
   p.status = 'Atendido';
   p.lotes = lotesUsados.join(', ');
   p.quantidade_kg = kgTotal;
 
-  // Cria venda (em caixas, kg registrado)
   var venda = {id:uid(),cliente_id:p.cliente_id,cliente:p.cliente_nome,fruta:p.fruta,
     quantidade:p.quantidade, quantidade_kg:kgTotal,
     valor:(p.valor||0)*p.quantidade, data:today(), pedido_id:p.id, origem:'pedido'};
   var resV = await POST('/api/vendas', venda);
   if(resV) DB.vendas.unshift(resV);
 
-  // Auto romaneio
   var numRom = 'ROM-'+Date.now().toString(36).toUpperCase();
   var resR = await POST('/api/romaneios', {id:uid(),numero:numRom,pedido_id:id,
     cliente_nome:p.cliente_nome,fruta:p.fruta,motorista:'',placa:'',
@@ -1518,7 +1538,7 @@ async function confirmarAtenderPedido() {
   if(resR) DB.romaneios.unshift(resR);
 
   closeModal();
-  toast('✅ Atendido! '+kgTotal.toFixed(0)+'kg abatidos do lote. Romaneio: '+numRom);
+  toast('✅ Atendido! '+kgTotal.toFixed(0)+'kg abatidos. Romaneio: '+numRom);
   await loadAllData();
   renderPedidos();
 }
@@ -1746,44 +1766,97 @@ function imprimirMapaCarga() {
   var data = window._romPrint;
   if(!data) { toast('Gere o romaneio primeiro','err'); return; }
   var rom = data.rom, peds = data.peds, rota = data.rota;
+  var empNome = (DB.empresa && DB.empresa.nome) ? DB.empresa.nome : 'Organize';
   var totalCx=0,totalKg=0,totalPal=0;
-  peds.forEach(function(p){totalCx+=p.quantidade;totalKg+=(p.quantidade_kg||0);totalPal+=Math.ceil(p.quantidade/30);});
+  peds.forEach(function(p){
+    totalCx+=p.quantidade;
+    totalKg+=(p.quantidade_kg||0);
+    totalPal+=Math.ceil(p.quantidade/30);
+  });
   var linhas = peds.map(function(p,i){
     var pal=Math.ceil(p.quantidade/30);
     return '<tr>'
-      +'<td style="font-weight:700;text-align:center;">'+(i+1)+'</td>'
+      +'<td style="font-weight:800;text-align:center;font-size:13px;">'+(i+1)+'</td>'
       +'<td style="font-weight:700;">'+p.cliente_nome+'</td>'
       +'<td>'+(p.mercadoria_nome||p.fruta)+'</td>'
-      +'<td style="text-align:center;">'+p.quantidade+'</td>'
-      +'<td style="text-align:center;color:#f97316;font-weight:700;">'+(p.quantidade_kg||0).toFixed(0)+' kg</td>'
-      +'<td style="text-align:center;">'+pal+'</td>'
+      +'<td style="text-align:center;font-weight:700;">'+p.quantidade+'</td>'
+      +'<td style="text-align:center;font-weight:700;color:#f97316;">'+(p.quantidade_kg||0).toFixed(0)+' kg</td>'
+      +'<td style="text-align:center;font-weight:800;font-size:13px;color:#7c3aed;">'+pal+'</td>'
       +'<td>'+(p.bancas||'-')+'</td>'
       +'<td>'+fmtDate(p.data_entrega)+'</td>'
-      +'<td style="border:1px solid #ccc;width:80px;">&nbsp;</td>'
+      +'<td style="border:1px solid #ccc;min-width:50px;">&nbsp;</td>'
       +'</tr>';
   }).join('');
-  var html = '<div class="pt">🚚 Mapa de Carga — '+rota+'</div>'
-    +'<div class="sec"><h3>Dados do Veículo</h3><div class="row">'
-    +'<div class="fld"><div class="lbl">Romaneio</div><div class="val" style="color:#f97316;">'+rom.numero+'</div></div>'
-    +'<div class="fld"><div class="lbl">Motorista</div><div class="val">'+(rom.motorista||'—')+'</div></div>'
-    +'<div class="fld"><div class="lbl">Placa</div><div class="val">'+(rom.placa||'—')+'</div></div>'
-    +'<div class="fld"><div class="lbl">Rota</div><div class="val">'+rota+'</div></div>'
-    +'<div class="fld"><div class="lbl">Data</div><div class="val">'+new Date().toLocaleDateString("pt-BR")+'</div></div>'
-    +'</div></div>'
-    +'<div class="sec"><h3>Resumo da Carga</h3><div class="row">'
-    +'<div class="fld"><div class="lbl">Pedidos</div><div class="val" style="font-size:18px;font-weight:800;">'+peds.length+'</div></div>'
-    +'<div class="fld"><div class="lbl">Total Caixas</div><div class="val" style="font-size:18px;font-weight:800;color:#f97316;">'+totalCx+' cx</div></div>'
-    +'<div class="fld"><div class="lbl">Total Peso</div><div class="val" style="font-size:18px;font-weight:800;color:#10b981;">'+totalKg.toFixed(0)+' kg</div></div>'
-    +'<div class="fld"><div class="lbl">Total Paletes</div><div class="val" style="font-size:18px;font-weight:800;color:#f59e0b;">'+totalPal+' pal</div></div>'
-    +'</div></div>'
-    +'<div class="sec"><h3>Pedidos da Carga (1 palete = 30 caixas)</h3>'
-    +'<table><tr><th>#</th><th>Cliente</th><th>Mercadoria</th><th>Caixas</th><th>Kg</th><th>Paletes</th><th>Banca/Calibre</th><th>Entrega</th><th>Conf. ✓</th></tr>'
-    +linhas+'</table>'
-    +'<div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">'
-    +'<div style="border:2px solid #ccc;padding:12px;border-radius:6px;"><div style="font-size:10px;color:#999;margin-bottom:20px;">Assinatura do Motorista:</div><div style="border-top:1px solid #ccc;padding-top:4px;font-size:10px;color:#999;">'+( rom.motorista||'____________________')+'</div></div>'
-    +'<div style="border:2px solid #ccc;padding:12px;border-radius:6px;"><div style="font-size:10px;color:#999;margin-bottom:20px;">Conferente:</div><div style="border-top:1px solid #ccc;padding-top:4px;font-size:10px;color:#999;">_______________________</div></div>'
-    +'</div></div>';
-  abrirJanelaImpressao('Mapa de Carga — '+rota, html);
+  var win = window.open('', '_blank', 'width=950,height=750');
+  win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8">'
+    +'<title>Mapa de Carga</title>'
+    +'<style>*{box-sizing:border-box;margin:0;padding:0;}'
+    +'body{font-family:Arial,sans-serif;font-size:11px;color:#111;padding:14px;}'
+    +'.topo{display:flex;justify-content:space-between;border-bottom:1px solid #ccc;padding-bottom:6px;margin-bottom:10px;}'
+    +'.tnome{font-size:12px;font-weight:700;color:#333;}.tinfo{font-size:9px;color:#999;text-align:right;}'
+    +'.titulo{font-size:14px;font-weight:800;color:#f97316;border-left:3px solid #f97316;padding-left:6px;margin-bottom:10px;}'
+    +'.resumo{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:10px;}'
+    +'.rcard{border:2px solid #eee;border-radius:5px;padding:8px;text-align:center;}'
+    +'.rcard.destaque{border-color:#7c3aed;background:#f5f3ff;}'
+    +'.rl{font-size:9px;color:#888;text-transform:uppercase;margin-bottom:2px;}'
+    +'.rv{font-size:18px;font-weight:800;color:#f97316;}'
+    +'.rv.pal{color:#7c3aed;font-size:22px;}'
+    +'.veh{background:#f9f9f9;border:1px solid #eee;border-radius:4px;padding:8px;margin-bottom:10px;display:flex;gap:20px;font-size:11px;}'
+    +'table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:10px;}'
+    +'th{background:#f97316;color:#fff;padding:5px 5px;text-align:left;}'
+    +'th.pal{background:#7c3aed;}'
+    +'td{padding:5px 5px;border-bottom:1px solid #eee;}'
+    +'tr:nth-child(even) td{background:#fafafa;}'
+    +'.assin{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px;}'
+    +'.assin-box{border:1px dashed #ccc;border-radius:4px;padding:10px;font-size:10px;color:#888;}'
+    +'.assin-box .linha{border-top:1px solid #ccc;margin-top:16px;padding-top:3px;}'
+    +'.np{margin-top:10px;display:flex;gap:6px;}@media print{.np{display:none!important;}}'
+    +'</style></head><body>'
+    +'<div class="topo">'
+    +'<div class="tnome">'+empNome+'</div>'
+    +'<div class="tinfo">Mapa de Carga &nbsp;|&nbsp; '+new Date().toLocaleDateString("pt-BR")+'</div>'
+    +'</div>'
+    +'<div class="titulo">🚚 Mapa de Carga — '+rota+'</div>'
+    +'<div class="veh">'
+    +'<span><strong>Romaneio:</strong> '+rom.numero+'</span>'
+    +'<span><strong>Motorista:</strong> '+(rom.motorista||'___________________')+'</span>'
+    +'<span><strong>Placa:</strong> '+(rom.placa||'________')+'</span>'
+    +'<span><strong>Rota:</strong> '+rota+'</span>'
+    +'<span><strong>Data:</strong> '+new Date().toLocaleDateString("pt-BR")+'</span>'
+    +'</div>'
+    +'<div class="resumo">'
+    +'<div class="rcard"><div class="rl">Pedidos</div><div class="rv">'+peds.length+'</div></div>'
+    +'<div class="rcard"><div class="rl">Total Caixas</div><div class="rv">'+totalCx+' cx</div></div>'
+    +'<div class="rcard"><div class="rl">Total Peso</div><div class="rv">'+totalKg.toFixed(0)+' kg</div></div>'
+    +'<div class="rcard destaque"><div class="rl">Total Paletes</div><div class="rv pal">'+totalPal+' pal</div></div>'
+    +'<div class="rcard"><div class="rl">Cxs/Palete</div><div class="rv" style="font-size:14px;">30 cx</div></div>'
+    +'</div>'
+    +'<table><thead><tr>'
+    +'<th>#</th><th>Cliente</th><th>Produto/Embal.</th>'
+    +'<th style="text-align:center;">Caixas</th>'
+    +'<th style="text-align:center;">KG</th>'
+    +'<th class="pal" style="text-align:center;">Paletes</th>'
+    +'<th>Banca/Calibre</th><th>Entrega</th><th style="text-align:center;">Conf.✓</th>'
+    +'</tr></thead><tbody>'+linhas+'</tbody>'
+    +'<tfoot><tr style="background:#fff3e0;font-weight:700;">'
+    +'<td colspan="3">TOTAL GERAL</td>'
+    +'<td style="text-align:center;font-size:13px;">'+totalCx+' cx</td>'
+    +'<td style="text-align:center;font-size:13px;color:#f97316;">'+totalKg.toFixed(0)+' kg</td>'
+    +'<td style="text-align:center;font-size:16px;color:#7c3aed;font-weight:900;">'+totalPal+' pal</td>'
+    +'<td colspan="3"></td>'
+    +'</tr></tfoot>'
+    +'</table>'
+    +'<div class="assin">'
+    +'<div class="assin-box">Motorista:<div class="linha">'+(rom.motorista||'_______________________')+'</div></div>'
+    +'<div class="assin-box">Conferente:<div class="linha">_______________________</div></div>'
+    +'<div class="assin-box">Responsável:<div class="linha">_______________________</div></div>'
+    +'</div>'
+    +'<div class="np">'
+    +'<button onclick="window.print()" style="background:#f97316;color:#fff;border:none;padding:7px 14px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;">🖨️ Imprimir</button>'
+    +'<button onclick="window.print()" style="background:#10b981;color:#fff;border:none;padding:7px 14px;border-radius:4px;font-size:12px;cursor:pointer;">📄 PDF</button>'
+    +'<button onclick="window.close()" style="background:#eee;color:#333;border:none;padding:7px 14px;border-radius:4px;font-size:12px;cursor:pointer;">✕ Fechar</button>'
+    +'</div></body></html>');
+  win.document.close();
 }
 
 function imprimirRomaneio(id) {
@@ -2462,35 +2535,67 @@ function imprimirPedido(id) {
   var p = DB.pedidos.find(function(x){return x.id===id;});
   if(!p) return;
   var cli = DB.clientes.find(function(c){return c.id===p.cliente_id;});
-  var html = '<div class="print-title">📋 Pedido de Venda</div>'
-    + '<div class="print-section"><h3>Dados do Pedido</h3>'
-    + '<div class="print-row">'
-    + '<div class="print-field"><div class="print-label">Cliente</div><div class="print-value">'+p.cliente_nome+'</div></div>'
-    + '<div class="print-field"><div class="print-label">Fruta</div><div class="print-value">'+p.fruta+'</div></div>'
-    + '<div class="print-field"><div class="print-label">Mercadoria</div><div class="print-value">'+(p.mercadoria_nome||'-')+'</div></div>'
-    + '<div class="print-field"><div class="print-label">Status</div><div class="print-value"><span class="'+(p.status==='Atendido'?'badge-atend':'badge-pend')+'">'+p.status+'</span></div></div>'
-    + '</div><div class="print-row">'
-    + '<div class="print-field"><div class="print-label">Quantidade</div><div class="print-value">'+p.quantidade+' unidades</div></div>'
-    + '<div class="print-field"><div class="print-label">Peso Total</div><div class="print-value">'+((p.quantidade_kg||0).toFixed(1))+' kg</div></div>'
-    + '<div class="print-field"><div class="print-label">Valor Unit.</div><div class="print-value">R$ '+((p.valor||0).toFixed(2))+'</div></div>'
-    + '<div class="print-field"><div class="print-label">Valor Total</div><div class="print-value" style="color:#f97316;font-size:14px;">R$ '+((p.valor||0)*p.quantidade).toFixed(2)+'</div></div>'
-    + '</div><div class="print-row">'
-    + '<div class="print-field"><div class="print-label">Data do Pedido</div><div class="print-value">'+fmtDate(p.data_pedido)+'</div></div>'
-    + '<div class="print-field"><div class="print-label">Data Entrega</div><div class="print-value">'+fmtDate(p.data_entrega)+'</div></div>'
-    + '<div class="print-field"><div class="print-label">Bancas</div><div class="print-value">'+(p.bancas||'-')+'</div></div>'
-    + '<div class="print-field"><div class="print-label">Lotes</div><div class="print-value">'+(p.lotes||'-')+'</div></div>'
-    + '</div>'+(p.obs?'<div class="print-row"><div class="print-field"><div class="print-label">Observações</div><div class="print-value">'+p.obs+'</div></div></div>':'')
-    + '</div>';
-  if(cli) {
-    html += '<div class="print-section"><h3>Dados do Cliente</h3>'
-      + '<div class="print-row">'
-      + '<div class="print-field"><div class="print-label">Nome</div><div class="print-value">'+cli.nome+'</div></div>'
-      + '<div class="print-field"><div class="print-label">Contato</div><div class="print-value">'+(cli.contato||'-')+'</div></div>'
-      + '<div class="print-field"><div class="print-label">Email</div><div class="print-value">'+(cli.email||'-')+'</div></div>'
-      + '<div class="print-field"><div class="print-label">Endereço</div><div class="print-value">'+(cli.endereco||'-')+'</div></div>'
-      + '</div></div>';
-  }
-  abrirJanelaImpressao('Pedido - '+p.cliente_nome, html);
+  var empNome = (DB.empresa && DB.empresa.nome) ? DB.empresa.nome : 'Organize';
+  var pal = Math.ceil(p.quantidade/30);
+  var win = window.open('', '_blank', 'width=800,height=600');
+  win.document.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">'
+    +'<title>Pedido</title>'
+    +'<style>*{box-sizing:border-box;margin:0;padding:0;}'
+    +'body{font-family:Arial,sans-serif;font-size:11px;color:#111;padding:16px;}'
+    +'.topo{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #ccc;padding-bottom:8px;margin-bottom:12px;}'
+    +'.tnome{font-size:13px;font-weight:700;color:#333;}'
+    +'.tsub{font-size:9px;color:#999;margin-top:2px;}'
+    +'.titulo{font-size:15px;font-weight:800;color:#f97316;border-left:4px solid #f97316;padding-left:8px;margin-bottom:12px;}'
+    +'.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}'
+    +'.sec{border:1px solid #ddd;border-radius:5px;padding:10px;}'
+    +'.sec h3{font-size:10px;font-weight:700;color:#f97316;text-transform:uppercase;margin-bottom:6px;}'
+    +'.row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px;}'
+    +'.f{flex:1;min-width:80px;}.fl{font-size:9px;color:#888;text-transform:uppercase;}.fv{font-size:11px;font-weight:700;color:#111;margin-top:1px;}'
+    +'.destaque{background:#f9f9f9;border:2px solid #f97316;border-radius:5px;padding:10px;margin-bottom:12px;display:flex;gap:16px;justify-content:center;}'
+    +'.dest-item{text-align:center;}.dest-l{font-size:9px;color:#888;text-transform:uppercase;}.dest-v{font-size:20px;font-weight:800;color:#f97316;}'
+    +'.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700;}'
+    +'.pend{background:#fef3c7;color:#92400e;}.atend{background:#d1fae5;color:#065f46;}'
+    +'.rod{margin-top:16px;padding:8px;border:1px dashed #ccc;border-radius:4px;display:flex;justify-content:space-between;font-size:10px;color:#888;}'
+    +'.np{margin-top:10px;display:flex;gap:6px;}@media print{.np{display:none!important;}}'
+    +'</style></head><body>'
+    +'<div class="topo">'
+    +'<div><div class="tnome">'+empNome+'</div><div class="tsub">'+(DB.empresa&&DB.empresa.telefone?DB.empresa.telefone:'')+'</div></div>'
+    +'<div style="text-align:right;font-size:9px;color:#999;">Pedido<br>'+new Date().toLocaleDateString("pt-BR")+'</div>'
+    +'</div>'
+    +'<div class="titulo">📋 Ordem de Pedido</div>'
+    +'<div class="destaque">'
+    +'<div class="dest-item"><div class="dest-l">Caixas</div><div class="dest-v">'+p.quantidade+'</div></div>'
+    +'<div class="dest-item"><div class="dest-l">KG Total</div><div class="dest-v">'+(p.quantidade_kg||0).toFixed(0)+' kg</div></div>'
+    +'<div class="dest-item"><div class="dest-l">Paletes</div><div class="dest-v">'+pal+'</div></div>'
+    +'<div class="dest-item"><div class="dest-l">Status</div><div class="dest-v" style="font-size:14px;"><span class="badge '+(p.status==='Atendido'?'atend':'pend')+'">'+p.status+'</span></div></div>'
+    +'</div>'
+    +'<div class="grid">'
+    +'<div class="sec"><h3>Cliente</h3>'
+    +'<div class="row"><div class="f"><div class="fl">Nome</div><div class="fv">'+p.cliente_nome+'</div></div></div>'
+    +(cli?'<div class="row"><div class="f"><div class="fl">Contato</div><div class="fv">'+(cli.contato||'-')+'</div></div><div class="f"><div class="fl">Endereço</div><div class="fv">'+(cli.endereco||'-')+'</div></div></div>':'')
+    +'</div>'
+    +'<div class="sec"><h3>Produto</h3>'
+    +'<div class="row"><div class="f"><div class="fl">Fruta</div><div class="fv">'+p.fruta+'</div></div><div class="f"><div class="fl">Embalagem</div><div class="fv">'+(p.mercadoria_nome||'-')+'</div></div></div>'
+    +'<div class="row"><div class="f"><div class="fl">Bancas/Calibre</div><div class="fv">'+(p.bancas||'-')+'</div></div></div>'
+    +'</div></div>'
+    +'<div class="sec" style="margin-bottom:12px;"><h3>Datas</h3>'
+    +'<div class="row">'
+    +'<div class="f"><div class="fl">Data do Pedido</div><div class="fv">'+fmtDate(p.data_pedido)+'</div></div>'
+    +'<div class="f"><div class="fl">Data de Entrega</div><div class="fv" style="color:#f97316;font-size:14px;">'+fmtDate(p.data_entrega)+'</div></div>'
+    +(p.lotes&&p.lotes!=="A definir pela produção"?'<div class="f"><div class="fl">Lotes</div><div class="fv">'+p.lotes+'</div></div>':'')
+    +(p.obs?'<div class="f"><div class="fl">Observações</div><div class="fv">'+p.obs+'</div></div>':'')
+    +'</div></div>'
+    +'<div class="rod">'
+    +'<span>Responsável: _______________________</span>'
+    +'<span>Conf.: _______________</span>'
+    +'<span>Data: ___/___/______</span>'
+    +'</div>'
+    +'<div class="np">'
+    +'<button onclick="window.print()" style="background:#f97316;color:#fff;border:none;padding:7px 14px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;">🖨️ Imprimir</button>'
+    +'<button onclick="window.print()" style="background:#10b981;color:#fff;border:none;padding:7px 14px;border-radius:4px;font-size:12px;cursor:pointer;">📄 PDF</button>'
+    +'<button onclick="window.close()" style="background:#eee;color:#333;border:none;padding:7px 14px;border-radius:4px;font-size:12px;cursor:pointer;">✕ Fechar</button>'
+    +'</div></body></html>');
+  win.document.close();
 }
 
 function imprimirVenda(id) {
