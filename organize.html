@@ -1030,6 +1030,121 @@ async function delEntrada(id) {
 // PEDIDOS
 // ═══════════════════════════════════════════════════════
 
+
+// ── FILTROS PEDIDOS ──────────────────────────────────────
+function getPedidosFiltrados() {
+  var ini = (document.getElementById('ped-f-ini')||{}).value || '';
+  var fim = (document.getElementById('ped-f-fim')||{}).value || '';
+  var ent = (document.getElementById('ped-f-ent')||{}).value || '';
+  var status = (document.getElementById('ped-f-status')||{}).value || '';
+  return DB.pedidos.filter(function(p) {
+    if(ini && p.data_pedido < ini) return false;
+    if(fim && p.data_pedido > fim) return false;
+    if(ent && p.data_entrega !== ent) return false;
+    if(status && p.status !== status) return false;
+    return true;
+  });
+}
+
+function limparFiltrosPedidos() {
+  ['ped-f-ini','ped-f-fim','ped-f-ent','ped-f-status'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+  filtrarPedidos();
+}
+
+function filtrarPedidos() {
+  var peds = getPedidosFiltrados();
+  var tbody = document.getElementById('ped-tbody');
+  if(!tbody) return;
+  if(peds.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">Nenhum pedido encontrado</td></tr>';
+    return;
+  }
+  tbody.innerHTML = peds.map(function(p) {
+    return '<tr>'
+      +'<td style="color:var(--text);font-weight:600">'+p.cliente_nome+'</td>'
+      +'<td>'+p.fruta+'</td>'
+      +'<td>'+p.quantidade+' cx</td>'
+      +'<td><strong style="color:var(--accent)">'+(p.quantidade_kg||0).toFixed(0)+' kg</strong></td>'
+      +'<td>'+fmtMoney((p.valor||0)*p.quantidade)+'</td>'
+      +'<td>'+fmtDate(p.data_entrega)+'</td>'
+      +'<td><span class="badge '+(p.status==='Atendido'?'bg':p.status==='Pendente'?'by':'bo')+'">'+p.status+'</span></td>'
+      +'<td style="display:flex;gap:4px;flex-wrap:wrap;">'
+      +(p.status==='Pendente'?'<button class="btn btn-g btn-sm" data-pid="'+p.id+'" onclick="modalAtenderPedido(this.dataset.pid)">✓ Atender</button>':'')
+      +'<button class="btn btn-s btn-sm" data-pid="'+p.id+'" onclick="modalEditarPedido(this.dataset.pid)" title="Editar">✏️</button>'
+      +'<button class="btn btn-s btn-sm" data-pid="'+p.id+'" onclick="imprimirPedido(this.dataset.pid)" title="Imprimir">🖨️</button>'
+      +'<button class="btn btn-r btn-sm" data-pid="'+p.id+'" onclick="delPedido(this.dataset.pid)"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button>'
+      +'</td></tr>';
+  }).join('');
+  lucide.createIcons();
+}
+
+function imprimirPedidosFiltrados() {
+  var peds = getPedidosFiltrados();
+  var ini = (document.getElementById('ped-f-ini')||{}).value || '';
+  var fim = (document.getElementById('ped-f-fim')||{}).value || '';
+  var status = (document.getElementById('ped-f-status')||{}).value || '';
+  var totalCx = peds.reduce(function(s,p){return s+p.quantidade;},0);
+  var totalKg = peds.reduce(function(s,p){return s+(p.quantidade_kg||0);},0);
+  var totalVal = peds.reduce(function(s,p){return s+(p.valor||0)*p.quantidade;},0);
+  var titulo = 'Relatório de Pedidos'+(status?' — '+status:'')+(ini||fim?' ('+fmtDate(ini)+' a '+fmtDate(fim)+')':'');
+  var html = '<div class="pt">'+titulo+'</div>'
+    +'<div class="sec"><h3>Totais</h3><div class="row">'
+    +'<div class="fld"><div class="lbl">Pedidos</div><div class="val">'+peds.length+'</div></div>'
+    +'<div class="fld"><div class="lbl">Total Caixas</div><div class="val">'+totalCx+' cx</div></div>'
+    +'<div class="fld"><div class="lbl">Total KG</div><div class="val" style="color:#f97316;">'+totalKg.toFixed(0)+' kg</div></div>'
+    +'<div class="fld"><div class="lbl">Valor Total</div><div class="val" style="color:#10b981;">R$ '+totalVal.toFixed(2)+'</div></div>'
+    +'</div></div>'
+    +'<div class="sec"><h3>Pedidos</h3>'
+    +'<table><tr><th>Cliente</th><th>Fruta</th><th>Qtd (cx)</th><th>Peso (kg)</th><th>Valor</th><th>Data Pedido</th><th>Entrega</th><th>Status</th></tr>'
+    +peds.map(function(p){
+      return '<tr><td>'+p.cliente_nome+'</td><td>'+p.fruta+'</td><td>'+p.quantidade+' cx</td>'
+        +'<td style="color:#f97316;font-weight:700;">'+(p.quantidade_kg||0).toFixed(0)+' kg</td>'
+        +'<td>R$ '+((p.valor||0)*p.quantidade).toFixed(2)+'</td>'
+        +'<td>'+fmtDate(p.data_pedido)+'</td><td>'+fmtDate(p.data_entrega)+'</td>'
+        +'<td>'+p.status+'</td></tr>';
+    }).join('')
+    +'</table></div>';
+  abrirJanelaImpressao(titulo, html);
+}
+
+function imprimirPedidosPendentes() {
+  var peds = DB.pedidos.filter(function(p){return p.status==='Pendente';})
+    .sort(function(a,b){return a.data_entrega.localeCompare(b.data_entrega);});
+  var totalCx = peds.reduce(function(s,p){return s+p.quantidade;},0);
+  var totalKg = peds.reduce(function(s,p){return s+(p.quantidade_kg||0);},0);
+  var html = '<div class="pt">📋 Relatório de Produção — Pedidos Pendentes</div>'
+    +'<div class="sec"><h3>Resumo</h3><div class="row">'
+    +'<div class="fld"><div class="lbl">Pedidos Pendentes</div><div class="val" style="color:#f97316;">'+peds.length+'</div></div>'
+    +'<div class="fld"><div class="lbl">Total Caixas</div><div class="val">'+totalCx+' cx</div></div>'
+    +'<div class="fld"><div class="lbl">Total KG</div><div class="val" style="color:#f97316;">'+totalKg.toFixed(0)+' kg</div></div>'
+    +'<div class="fld"><div class="lbl">Gerado em</div><div class="val">'+new Date().toLocaleString("pt-BR")+'</div></div>'
+    +'</div></div>'
+    +'<div class="sec"><h3>Pedidos para Produção (ordenado por entrega)</h3>'
+    +'<table><tr><th>#</th><th>Cliente</th><th>Fruta</th><th>Mercadoria</th><th>Qtd (cx)</th><th>Peso (kg)</th><th>Bancas/Calibre</th><th>Entrega</th><th>Obs</th></tr>'
+    +peds.map(function(p,i){
+      var hoje = today();
+      var atrasado = p.data_entrega < hoje;
+      return '<tr style="background:'+(atrasado?'#fff5f5':'')+';">'
+        +'<td style="font-weight:700;">'+(i+1)+'</td>'
+        +'<td style="font-weight:700;">'+p.cliente_nome+'</td>'
+        +'<td>'+p.fruta+'</td>'
+        +'<td>'+(p.mercadoria_nome||'-')+'</td>'
+        +'<td style="font-weight:700;">'+p.quantidade+' cx</td>'
+        +'<td style="color:#f97316;font-weight:700;">'+(p.quantidade_kg||0).toFixed(0)+' kg</td>'
+        +'<td>'+(p.bancas||'-')+'</td>'
+        +'<td style="color:'+(atrasado?'#ef4444':'#111')+';font-weight:'+(atrasado?'700':'400')+';">'+(atrasado?'⚠️ ':'')+fmtDate(p.data_entrega)+'</td>'
+        +'<td>'+(p.obs||'-')+'</td>'
+        +'</tr>';
+    }).join('')
+    +'</table>'
+    +'<div style="margin-top:20px;padding:15px;border:2px dashed #ccc;text-align:center;color:#999;font-size:11px;">Assinatura Responsável: _________________________ Data: ___/___/______</div>'
+    +'</div>';
+  abrirJanelaImpressao('Relatório de Produção', html);
+}
+
 // ── BANCA / CALIBRE LOGIC ────────────────────────────────
 var FRUTAS_BANCA = ['LARANJA','LIMA TAITI','MEXERICA POKAN'];
 var CALIBRES_LISTA = ['2A','2B','3A','3B','4A','4B'];
@@ -1181,71 +1296,64 @@ async function addPedido() {
   if(res){ DB.pedidos.unshift(res); toast('✓ Pedido criado!'); renderPedidos(); }
 }
 async function modalAtenderPedido(id) {
+  window._atenderPedidoId = id;
   var p = DB.pedidos.find(function(x){return x.id===id;});
   if(!p) return;
-  var lotes = DB.entradas.filter(function(e){return (e.quantidade_atual!=null?e.quantidade_atual:e.quantidade)>0;});
-  
-  window._atenderPedidoId = id;
-  var lotesHTML = '';
-  if(lotes.length===0) {
-    lotesHTML = '<div class="empty">Nenhum lote disponível em estoque</div>';
-  } else {
-    lotes.forEach(function(l) {
-      var saldo = l.quantidade_atual!=null ? l.quantidade_atual : l.quantidade;
-      lotesHTML += '<div style="display:flex;align-items:center;gap:10px;padding:8px;background:#0d1320;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">'
-        + '<input type="checkbox" class="lat-cb" value="'+l.id+'" data-lote="'+l.lote+'" data-peso="'+(l.peso_unitario||1)+'" data-saldo="'+saldo+'" style="accent-color:var(--accent);width:15px;height:15px;" onchange="autoFillQtdLote(this)">'
-        + '<div style="flex:1;">'
-        + '<div style="font-size:12px;font-weight:700;color:var(--text)">'+l.lote+' — '+l.fruta+'</div>'
-        + '<div style="font-size:10px;color:var(--muted)">Saldo: '+saldo+' unid. | '+(saldo*(parseFloat(p.peso_unitario)||parseFloat(l.peso_unitario)||1)).toFixed(1)+' kg ('+p.peso_unitario+'kg/cx)</div>'
-        + '</div>'
-        + '<div><label style="font-size:10px;color:var(--sub);">Qtd usada:</label>'
-        + '<input type="number" class="inp lat-qtd" data-id="'+l.id+'" min="1" max="'+saldo+'" placeholder="0" style="width:70px;padding:4px 6px;font-size:11px;" oninput="atualizarResumoAtender()"></div>'
-        + '</div>';
-    });
-  }
 
-  var prodAtender = DB.produtos.find(function(x){return x.id===p.mercadoria_id;});
-  var pesoAtender = prodAtender ? parseFloat(prodAtender.peso) : (parseFloat(p.peso_unitario)||1);
-  // Fallback: use quantidade_kg / quantidade if produto not found
-  if(pesoAtender <= 0 || pesoAtender === 1) {
-    var pCalc = p.quantidade > 0 ? parseFloat(p.quantidade_kg) / p.quantidade : 0;
-    if(pCalc > 1) pesoAtender = pCalc;
-  }
-  var kgTotalPedido = p.quantidade * pesoAtender;
-  // Store peso globally so atualizarResumoAtender can use it reliably
-  window._pesoAtenderAtual = pesoAtender;
-  var pedBancas = p.bancas ? ' · Destino: '+p.bancas : '';
-  modal('<div class="section-title"><i data-lucide="check-circle" style="width:16px;height:16px;color:var(--green);"></i> Atender Pedido — '+p.cliente_nome+'</div>'
-    + '<div style="margin-bottom:8px;padding:10px;background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.2);border-radius:8px;font-size:12px;">'
-    + '<strong style="color:var(--text)">'+p.fruta+'</strong>'
-    + ' &nbsp;|&nbsp; <span style="color:var(--accent)">'+p.quantidade+' caixas</span>'
-    + ' &nbsp;|&nbsp; <span style="color:var(--accent)">'+pesoAtender+'kg/cx</span>'
-    + ' &nbsp;|&nbsp; <strong style="color:var(--green)">'+kgTotalPedido.toFixed(0)+' kg total</strong>'
-    + pedBancas
+  // Peso da mercadoria cadastrada (fonte definitiva)
+  var prod = DB.produtos.find(function(x){return x.id===p.mercadoria_id;});
+  var pesoKgCx = prod && parseFloat(prod.peso) > 0 ? parseFloat(prod.peso) :
+                 parseFloat(p.peso_unitario) > 0 ? parseFloat(p.peso_unitario) :
+                 p.quantidade > 0 && parseFloat(p.quantidade_kg) > 0 ? parseFloat(p.quantidade_kg)/p.quantidade : 1;
+  window._pesoAtenderAtual = pesoKgCx;
+  var kgTotal = p.quantidade * pesoKgCx;
+
+  var lotes = DB.entradas.filter(function(e){
+    return (e.quantidade_atual!=null ? e.quantidade_atual : e.quantidade) > 0;
+  });
+
+  var lotesHTML = lotes.length===0
+    ? '<div class="empty">Nenhum lote disponível em estoque</div>'
+    : lotes.map(function(l) {
+        var saldo = l.quantidade_atual!=null ? l.quantidade_atual : l.quantidade;
+        var saldoKg = saldo * pesoKgCx;
+        return '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:#0d1320;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">'
+          + '<input type="checkbox" class="lat-cb" value="'+l.id+'" data-lote="'+l.lote+'" data-saldo="'+saldo+'" style="accent-color:var(--accent);width:16px;height:16px;" onchange="autoFillQtdLote(this)">'
+          + '<div style="flex:1;">'
+          + '<div style="font-size:12px;font-weight:700;color:var(--text)">'+l.lote+' — '+l.fruta+'</div>'
+          + '<div style="font-size:10px;color:var(--muted);">Saldo: <strong style="color:var(--green)">'+saldo+' cx</strong> = <strong style="color:var(--accent)">'+saldoKg.toFixed(0)+' kg</strong> ('+pesoKgCx+'kg/cx)</div>'
+          + '</div>'
+          + '<div style="text-align:center;">'
+          + '<div style="font-size:9px;color:var(--muted);margin-bottom:2px;">Qtd (cx)</div>'
+          + '<input type="number" class="inp lat-qtd" data-id="'+l.id+'" min="1" max="'+saldo+'" placeholder="0" style="width:75px;padding:4px 6px;font-size:12px;text-align:center;" oninput="atualizarResumoAtender()">'
+          + '<div class="lat-kg-show" style="font-size:9px;color:var(--accent);margin-top:2px;" data-id="'+l.id+'">— kg</div>'
+          + '</div></div>';
+      }).join('');
+
+  modal('<div class="section-title">✅ Atender Pedido — '+p.cliente_nome+'</div>'
+    + '<div style="margin-bottom:10px;padding:10px;background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.2);border-radius:8px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center;">'
+    + '<div><div style="font-size:9px;color:var(--muted);">FRUTA</div><div style="font-weight:700;color:var(--text)">'+p.fruta+'</div></div>'
+    + '<div><div style="font-size:9px;color:var(--muted);">CAIXAS</div><div style="font-weight:700;color:var(--accent)">'+p.quantidade+' cx</div></div>'
+    + '<div><div style="font-size:9px;color:var(--muted);">PESO/CX</div><div style="font-weight:700;color:var(--accent)">'+pesoKgCx+' kg</div></div>'
+    + '<div><div style="font-size:9px;color:var(--muted);">TOTAL KG</div><div style="font-weight:700;color:var(--green)">'+kgTotal.toFixed(0)+' kg</div></div>'
     + '</div>'
-    + '<div style="margin-bottom:6px;"><label class="lbl">Selecione os lotes e informe a quantidade usada (campo já preenchido com o total do pedido):</label></div>'
-    + '<div id="lotes-atender" style="max-height:280px;overflow-y:auto;margin-bottom:12px;">'+lotesHTML+'</div>'
-    + '<div id="lat-resumo" style="padding:10px;background:#060a12;border-radius:8px;font-size:12px;color:var(--sub);margin-bottom:14px;">Selecione os lotes acima</div>'
+    + '<div style="margin-bottom:6px;font-size:11px;color:var(--sub);">Selecione o lote — quantidade preenchida automaticamente em caixas:</div>'
+    + '<div id="lotes-atender" style="max-height:260px;overflow-y:auto;margin-bottom:10px;">'+lotesHTML+'</div>'
+    + '<div id="lat-resumo" style="padding:10px;background:#060a12;border-radius:8px;font-size:12px;color:var(--sub);margin-bottom:12px;">☝️ Selecione um lote acima</div>'
     + '<div style="display:flex;gap:8px;">'
-    + '<button class="btn btn-g" onclick="confirmarAtenderPedido(&quot;'+p.id+'&quot;)">✅ Confirmar Atendimento</button>'
+    + '<button class="btn btn-g" onclick="confirmarAtenderPedido()">✅ Confirmar Atendimento</button>'
     + '<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
     + '</div>');
-
-  document.querySelectorAll('.lat-cb, .lat-qtd').forEach(function(el) {
-    el.addEventListener('change', atualizarResumoAtender);
-    el.addEventListener('input', atualizarResumoAtender);
-  });
   lucide.createIcons();
 }
+
 
 function autoFillQtdLote(cb) {
   if(cb.checked) {
     var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
-    if(qtdEl && (!qtdEl.value || qtdEl.value === '0')) {
-      // Get remaining needed quantity
+    if(qtdEl) {
       var p = DB.pedidos.find(function(x){return x.id===window._atenderPedidoId;});
       if(p) {
-        // How much already allocated to other checked lotes
         var jaAlocado = 0;
         document.querySelectorAll('.lat-cb:checked').forEach(function(otherCb) {
           if(otherCb.value !== cb.value) {
@@ -1258,29 +1366,41 @@ function autoFillQtdLote(cb) {
         qtdEl.value = Math.min(restante, saldo);
       }
     }
-    atualizarResumoAtender();
   } else {
-    atualizarResumoAtender();
+    var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
+    if(qtdEl) qtdEl.value = '';
   }
+  atualizarResumoAtender();
 }
 
 function atualizarResumoAtender() {
+  var peso = window._pesoAtenderAtual || 1;
   var cbs = document.querySelectorAll('.lat-cb:checked');
-  var total = 0;
+  var totalCx = 0, totalKg = 0;
   var resumo = [];
-  // Use the peso already calculated when modal opened (most reliable)
-  var pesoParaResumo = window._pesoAtenderAtual || 1;
+  // Update per-lote kg display
+  document.querySelectorAll('.lat-qtd').forEach(function(qtdEl) {
+    var qtd = parseInt(qtdEl.value)||0;
+    var kgShow = document.querySelector('.lat-kg-show[data-id="'+qtdEl.dataset.id+'"]');
+    if(kgShow) kgShow.textContent = qtd > 0 ? (qtd*peso).toFixed(0)+' kg' : '— kg';
+  });
   cbs.forEach(function(cb) {
     var qtdEl = document.querySelector('.lat-qtd[data-id="'+cb.value+'"]');
     var qtd = parseInt(qtdEl ? qtdEl.value : 0)||0;
-    var kg = qtd * pesoParaResumo;
-    total += kg;
-    if(qtd>0) resumo.push(cb.dataset.lote+': '+qtd+' cx × '+pesoParaResumo+'kg = '+kg.toFixed(1)+' kg');
+    if(qtd > 0) {
+      var kg = qtd * peso;
+      totalCx += qtd; totalKg += kg;
+      resumo.push('<strong>'+cb.dataset.lote+'</strong>: '+qtd+' cx = '+kg.toFixed(0)+' kg');
+    }
   });
   var el = document.getElementById('lat-resumo');
-  if(el) el.innerHTML = resumo.length > 0 
-    ? '<span style="color:var(--green)">✓ '+resumo.join(' + ')+' = <strong>'+total.toFixed(1)+' kg total</strong></span>'
-    : 'Selecione os lotes acima';
+  if(!el) return;
+  if(resumo.length > 0) {
+    el.innerHTML = '<span style="color:var(--green)">✓ '+resumo.join('  +  ')+'</span>'
+      +'<div style="margin-top:6px;font-size:13px;font-weight:800;color:var(--accent)">Total: '+totalCx+' cx × '+peso+'kg = <span style="color:var(--green)">'+totalKg.toFixed(0)+' kg</span></div>';
+  } else {
+    el.innerHTML = '☝️ Selecione um lote acima';
+  }
 }
 
 async function confirmarAtenderPedido(id) {
@@ -1321,8 +1441,26 @@ async function confirmarAtenderPedido(id) {
   var res = await POST('/api/vendas', venda);
   if(res) DB.vendas.unshift(res);
 
+  // ── AUTO ROMANEIO ──────────────────────────────────────
+  var numRom = 'ROM-' + Date.now().toString(36).toUpperCase();
+  var romaneio = {
+    id: uid(),
+    numero: numRom,
+    pedido_id: id,
+    cliente_nome: p.cliente_nome,
+    fruta: p.fruta,
+    motorista: '',
+    placa: '',
+    caixas: p.quantidade,
+    qualidade: '',
+    obs: 'Gerado automaticamente ao atender pedido',
+    data: today()
+  };
+  var resRom = await POST('/api/romaneios', romaneio);
+  if(resRom) DB.romaneios.unshift(resRom);
+
   closeModal();
-  toast('✅ Pedido atendido! '+qtd_total_text(cbs, pesoPorCaixa));
+  toast('✅ Pedido atendido! Romaneio '+numRom+' criado. '+qtd_total_text(cbs, pesoPorCaixa));
   await loadAllData();
   renderPedidos();
 }
@@ -1368,6 +1506,25 @@ async function modalEditarPedido(id) {
 async function salvarEdicaoPedido() {
   var id = window._editPedidoId;
   if(!id) return toast('Erro: ID não encontrado','err');
+  var pAnt = DB.pedidos.find(function(x){return x.id===id;});
+  // If pedido was Atendido and has lotes, restore stock before editing
+  if(pAnt && pAnt.status === 'Atendido' && pAnt.lotes && pAnt.lotes !== 'A definir pela produção') {
+    var parts = pAnt.lotes.split(',');
+    for(var pi=0; pi<parts.length; pi++) {
+      var m = parts[pi].trim().match(/^(.+?)\((\d+)cx\/?(\d+)?kg?\)$/);
+      if(m) {
+        var loteName = m[1].trim();
+        var qtdRest = parseInt(m[2]);
+        var loteObj = DB.entradas.find(function(e){return e.lote===loteName;});
+        if(loteObj) {
+          var novoSaldo = (loteObj.quantidade_atual||0) + qtdRest;
+          loteObj.quantidade_atual = novoSaldo;
+          loteObj.status = novoSaldo > 0 ? 'disponivel' : 'esgotado';
+          await PATCH('/api/entradas/'+loteObj.id+'/saldo', {quantidade_atual: novoSaldo, status: loteObj.status});
+        }
+      }
+    }
+  }
   var p = DB.pedidos.find(function(x){return x.id===id;});
   if(!p) return;
   var cliEl = document.getElementById('ep-cli');
@@ -1433,35 +1590,161 @@ async function delPedido(id) {
 // ROMANEIO
 // ═══════════════════════════════════════════════════════
 function renderRomaneio() {
-  const peds=DB.pedidos.filter(p=>p.status==='Pendente');
-  document.getElementById('content').innerHTML=`
-  <div class="card" style="margin-bottom:16px;">
-    <div class="section-title"><i data-lucide="truck" style="width:16px;height:16px;"></i> Gerar Romaneio</div>
-    <div class="frow">
-      <div><label class="lbl">Pedido</label><select class="inp" id="rom-ped" onchange="preencherRomPed()"><option value="">Selecione</option>${peds.map(p=>`<option value="${p.id}">${p.cliente_nome} - ${p.fruta}</option>`).join('')}</select></div>
-      <div><label class="lbl">Número</label><input class="inp" id="rom-num" placeholder="Automático"></div>
-      <div><label class="lbl">Motorista</label><input class="inp" id="rom-motorista" placeholder="Nome"></div>
-      <div><label class="lbl">Placa</label><input class="inp" id="rom-placa" placeholder="ABC-1234"></div>
-      <div><label class="lbl">Data</label><input class="inp" id="rom-data" type="date" value="${today()}"></div>
-      <div><label class="lbl">Qtd Caixas</label><input class="inp" id="rom-caixas" type="number" placeholder="0"></div>
-      <div><label class="lbl">Qualidade</label><select class="inp" id="rom-qual"><option value="">Selecione</option><option>✓ Verificada</option><option>⚠ Parcial</option><option>✗ Problemas</option></select></div>
-    </div>
-    <div style="margin-bottom:10px;"><label class="lbl">Observações</label><textarea class="inp" id="rom-obs" style="height:50px;resize:none;"></textarea></div>
-    <button class="btn btn-p" onclick="addRomaneio()"><i data-lucide="plus" style="width:13px;height:13px;"></i> Gerar Romaneio</button>
-  </div>
-  <div class="card">
-    <div class="section-title">Romaneios (${DB.romaneios.length})</div>
-    <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nº</th><th>Cliente</th><th>Motorista</th><th>Placa</th><th>Caixas</th><th>Data</th><th></th></tr></thead><tbody>
-    ${DB.romaneios.map(r=>`<tr>
-      <td><span class="badge bo">${r.numero}</span></td>
-      <td style="color:var(--text);font-weight:600">${r.cliente_nome}</td>
-      <td>${r.motorista}</td><td>${r.placa}</td><td>${r.caixas}</td><td>${fmtDate(r.data)}</td>
-      <td><button class="btn btn-r btn-sm" onclick="delRomaneio('${r.id}')"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button></td>
-    </tr>`).join('')||'<tr><td colspan="7" class="empty">Nenhum romaneio</td></tr>'}
-    </tbody></table></div>
-  </div>`;
+  var pedsAtendidos = DB.pedidos.filter(function(p){return p.status==='Atendido';});
+  document.getElementById('content').innerHTML = '<div class="card" style="margin-bottom:16px;">'
+    +'<div class="section-title">🚚 Gerar Mapa de Carga / Romaneio</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">'
+    +'<div><label class="lbl">Motorista</label><input class="inp" id="rom-motor" placeholder="Nome do motorista"></div>'
+    +'<div><label class="lbl">Placa</label><input class="inp" id="rom-placa" placeholder="Placa do veículo"></div>'
+    +'<div><label class="lbl">Rota</label><input class="inp" id="rom-rota" placeholder="Ex: Rota 1, Centro, Norte..."></div>'
+    +'</div>'
+    +'<div style="margin-bottom:10px;">'
+    +'<label class="lbl">Selecione os Pedidos Atendidos para esta carga:</label>'
+    +'<div style="max-height:220px;overflow-y:auto;margin-top:6px;border:1px solid var(--border);border-radius:8px;padding:6px;">'
+    +(pedsAtendidos.length===0
+      ? '<div class="empty">Nenhum pedido atendido disponível</div>'
+      : pedsAtendidos.map(function(p){
+          var kg = p.quantidade_kg||0;
+          var pal = Math.ceil(p.quantidade/30);
+          return '<label style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--border);cursor:pointer;">'
+            +'<input type="checkbox" class="rom-ped-cb" value="'+p.id+'" style="accent-color:var(--accent);width:15px;height:15px;" onchange="atualizarResumoRomaneio()">'
+            +'<div style="flex:1;">'
+            +'<div style="font-size:12px;font-weight:700;color:var(--text)">'+p.cliente_nome+'</div>'
+            +'<div style="font-size:10px;color:var(--muted)">'+p.fruta+' · '+p.quantidade+' cx · '+kg.toFixed(0)+' kg · '+pal+' palete(s) · Entrega: '+fmtDate(p.data_entrega)+'</div>'
+            +'</div></label>';
+        }).join(''))
+    +'</div></div>'
+    +'<div id="rom-resumo" style="margin-bottom:12px;padding:10px;background:#060a12;border-radius:8px;font-size:12px;color:var(--sub);">Selecione pedidos acima</div>'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button class="btn btn-p" onclick="gerarRomaneioMulti()">🚚 Gerar Mapa de Carga</button>'
+    +'<button class="btn btn-s btn-sm" onclick="imprimirMapaCarga()">🖨️ Imprimir sem salvar</button>'
+    +'</div></div>'
+    +'<div class="section-title" style="margin-bottom:10px;">📋 Romaneios Gerados ('+DB.romaneios.length+')</div>'
+    +'<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nº</th><th>Pedido/Cliente</th><th>Fruta</th><th>Motorista</th><th>Rota</th><th>Caixas</th><th>Data</th><th>Ações</th></tr></thead><tbody>'
+    +DB.romaneios.map(function(r){
+      return '<tr>'
+        +'<td><span class="badge bo">'+r.numero+'</span></td>'
+        +'<td>'+r.cliente_nome+'</td>'
+        +'<td>'+r.fruta+'</td>'
+        +'<td>'+(r.motorista||'-')+'</td>'
+        +'<td>'+(r.rota||r.obs||'-')+'</td>'
+        +'<td>'+r.caixas+' cx</td>'
+        +'<td>'+fmtDate(r.data)+'</td>'
+        +'<td style="display:flex;gap:4px;">'
+        +'<button class="btn btn-p btn-sm" data-rid="'+r.id+'" onclick="imprimirRomaneio(this.dataset.rid)">🖨️</button>'
+        +'<button class="btn btn-r btn-sm" data-rid="'+r.id+'" onclick="delRomaneio(this.dataset.rid)"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button>'
+        +'</td></tr>';
+    }).join('')
+    +'</tbody></table></div>';
   lucide.createIcons();
+  atualizarResumoRomaneio();
 }
+
+function atualizarResumoRomaneio() {
+  var cbs = document.querySelectorAll('.rom-ped-cb:checked');
+  var totalCx = 0, totalKg = 0, totalPal = 0;
+  cbs.forEach(function(cb) {
+    var p = DB.pedidos.find(function(x){return x.id===cb.value;});
+    if(p) { totalCx+=p.quantidade; totalKg+=(p.quantidade_kg||0); totalPal+=Math.ceil(p.quantidade/30); }
+  });
+  var el = document.getElementById('rom-resumo');
+  if(!el) return;
+  if(cbs.length===0) { el.innerHTML='Selecione pedidos acima'; return; }
+  el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center;">'
+    +'<div><div style="font-size:9px;color:var(--muted)">PEDIDOS</div><div style="font-size:16px;font-weight:800;color:var(--text)">'+cbs.length+'</div></div>'
+    +'<div><div style="font-size:9px;color:var(--muted)">CAIXAS</div><div style="font-size:16px;font-weight:800;color:var(--accent)">'+totalCx+'</div></div>'
+    +'<div><div style="font-size:9px;color:var(--muted)">PESO TOTAL</div><div style="font-size:16px;font-weight:800;color:var(--green)">'+totalKg.toFixed(0)+' kg</div></div>'
+    +'<div><div style="font-size:9px;color:var(--muted)">PALETES</div><div style="font-size:16px;font-weight:800;color:var(--yellow)">'+totalPal+'</div></div>'
+    +'</div>';
+}
+
+async function gerarRomaneioMulti() {
+  var cbs = document.querySelectorAll('.rom-ped-cb:checked');
+  if(cbs.length===0) return toast('Selecione ao menos um pedido','err');
+  var motor = (document.getElementById('rom-motor')||{}).value||'';
+  var placa = (document.getElementById('rom-placa')||{}).value||'';
+  var rota  = (document.getElementById('rom-rota')||{}).value||'Sem rota';
+  var numRom = 'ROM-'+Date.now().toString(36).toUpperCase();
+  var pedsSel = [];
+  cbs.forEach(function(cb){
+    var p = DB.pedidos.find(function(x){return x.id===cb.value;});
+    if(p) pedsSel.push(p);
+  });
+  var totalCx = pedsSel.reduce(function(s,p){return s+p.quantidade;},0);
+  var rom = {id:uid(),numero:numRom,pedido_id:pedsSel.map(function(p){return p.id;}).join(','),
+    cliente_nome:pedsSel.map(function(p){return p.cliente_nome;}).join(' | '),
+    fruta:pedsSel.map(function(p){return p.fruta;}).join(', '),
+    motorista:motor,placa:placa,caixas:totalCx,rota:rota,
+    obs:'Rota: '+rota,data:today()};
+  var res = await POST('/api/romaneios',rom);
+  if(res) { DB.romaneios.unshift(res); toast('✅ Romaneio '+numRom+' criado — Rota: '+rota); }
+  // Print automatically
+  window._romPrint = {rom:res||rom, peds:pedsSel, rota:rota};
+  imprimirMapaCarga();
+  renderRomaneio();
+}
+
+function imprimirMapaCarga() {
+  var data = window._romPrint;
+  if(!data) { toast('Gere o romaneio primeiro','err'); return; }
+  var rom = data.rom, peds = data.peds, rota = data.rota;
+  var totalCx=0,totalKg=0,totalPal=0;
+  peds.forEach(function(p){totalCx+=p.quantidade;totalKg+=(p.quantidade_kg||0);totalPal+=Math.ceil(p.quantidade/30);});
+  var linhas = peds.map(function(p,i){
+    var pal=Math.ceil(p.quantidade/30);
+    return '<tr>'
+      +'<td style="font-weight:700;text-align:center;">'+(i+1)+'</td>'
+      +'<td style="font-weight:700;">'+p.cliente_nome+'</td>'
+      +'<td>'+(p.mercadoria_nome||p.fruta)+'</td>'
+      +'<td style="text-align:center;">'+p.quantidade+'</td>'
+      +'<td style="text-align:center;color:#f97316;font-weight:700;">'+(p.quantidade_kg||0).toFixed(0)+' kg</td>'
+      +'<td style="text-align:center;">'+pal+'</td>'
+      +'<td>'+(p.bancas||'-')+'</td>'
+      +'<td>'+fmtDate(p.data_entrega)+'</td>'
+      +'<td style="border:1px solid #ccc;width:80px;">&nbsp;</td>'
+      +'</tr>';
+  }).join('');
+  var html = '<div class="pt">🚚 Mapa de Carga — '+rota+'</div>'
+    +'<div class="sec"><h3>Dados do Veículo</h3><div class="row">'
+    +'<div class="fld"><div class="lbl">Romaneio</div><div class="val" style="color:#f97316;">'+rom.numero+'</div></div>'
+    +'<div class="fld"><div class="lbl">Motorista</div><div class="val">'+(rom.motorista||'—')+'</div></div>'
+    +'<div class="fld"><div class="lbl">Placa</div><div class="val">'+(rom.placa||'—')+'</div></div>'
+    +'<div class="fld"><div class="lbl">Rota</div><div class="val">'+rota+'</div></div>'
+    +'<div class="fld"><div class="lbl">Data</div><div class="val">'+new Date().toLocaleDateString("pt-BR")+'</div></div>'
+    +'</div></div>'
+    +'<div class="sec"><h3>Resumo da Carga</h3><div class="row">'
+    +'<div class="fld"><div class="lbl">Pedidos</div><div class="val" style="font-size:18px;font-weight:800;">'+peds.length+'</div></div>'
+    +'<div class="fld"><div class="lbl">Total Caixas</div><div class="val" style="font-size:18px;font-weight:800;color:#f97316;">'+totalCx+' cx</div></div>'
+    +'<div class="fld"><div class="lbl">Total Peso</div><div class="val" style="font-size:18px;font-weight:800;color:#10b981;">'+totalKg.toFixed(0)+' kg</div></div>'
+    +'<div class="fld"><div class="lbl">Total Paletes</div><div class="val" style="font-size:18px;font-weight:800;color:#f59e0b;">'+totalPal+' pal</div></div>'
+    +'</div></div>'
+    +'<div class="sec"><h3>Pedidos da Carga (1 palete = 30 caixas)</h3>'
+    +'<table><tr><th>#</th><th>Cliente</th><th>Mercadoria</th><th>Caixas</th><th>Kg</th><th>Paletes</th><th>Banca/Calibre</th><th>Entrega</th><th>Conf. ✓</th></tr>'
+    +linhas+'</table>'
+    +'<div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">'
+    +'<div style="border:2px solid #ccc;padding:12px;border-radius:6px;"><div style="font-size:10px;color:#999;margin-bottom:20px;">Assinatura do Motorista:</div><div style="border-top:1px solid #ccc;padding-top:4px;font-size:10px;color:#999;">'+( rom.motorista||'____________________')+'</div></div>'
+    +'<div style="border:2px solid #ccc;padding:12px;border-radius:6px;"><div style="font-size:10px;color:#999;margin-bottom:20px;">Conferente:</div><div style="border-top:1px solid #ccc;padding-top:4px;font-size:10px;color:#999;">_______________________</div></div>'
+    +'</div></div>';
+  abrirJanelaImpressao('Mapa de Carga — '+rota, html);
+}
+
+function imprimirRomaneio(id) {
+  var r = DB.romaneios.find(function(x){return x.id===id;});
+  if(!r) return;
+  var pedIds = r.pedido_id ? r.pedido_id.split(',') : [];
+  var peds = pedIds.map(function(pid){ return DB.pedidos.find(function(p){return p.id===pid.trim();}); }).filter(Boolean);
+  window._romPrint = {rom:r, peds:peds.length?peds:[{cliente_nome:r.cliente_nome,fruta:r.fruta,quantidade:r.caixas,quantidade_kg:r.caixas*20,bancas:'',data_entrega:'',mercadoria_nome:r.fruta}], rota:r.rota||r.obs||'—'};
+  imprimirMapaCarga();
+}
+
+async function delRomaneio(id) {
+  if(!confirm('Excluir este romaneio?')) return;
+  await DEL('/api/romaneios/'+id);
+  DB.romaneios = DB.romaneios.filter(function(x){return x.id!==id;});
+  toast('Romaneio excluído');
+  renderRomaneio();
+}
+
 function preencherRomPed() {
   const pedId=document.getElementById('rom-ped').value;
   const ped=DB.pedidos.find(p=>p.id===pedId);
@@ -1533,7 +1816,8 @@ async function addVenda() {
 async function delVenda(id) {
   var v = DB.vendas.find(function(x){return x.id===id;});
   if(!v) return;
-  var msg = 'Excluir esta venda?';
+  var msg = 'Excluir venda de '+v.cliente+'?';
+  if(v.pedido_id) msg += '\nEstoque restaurado e pedido voltará para Pendente.';
   if(v.pedido_id) msg += '\nAtenção: se tiver lote vinculado ao pedido, exclua pelo Pedido para restaurar o estoque corretamente.';
   if(!confirm(msg)) return;
   // If venda has a pedido_id, use the /completo endpoint to restore stock

@@ -387,8 +387,41 @@ app.delete('/api/pedidos/:id/completo', auth, async (req, res) => {
   fazerBackup('del-pedido-completo');
   res.json({ ok: true });
 });
-crudRoutes('romaneios',      ['numero','pedido_id','cliente_nome','fruta','motorista','placa','caixas','qualidade','obs','data']);
+crudRoutes('romaneios',      ['numero','pedido_id','cliente_nome','fruta','motorista','placa','caixas','qualidade','rota','obs','data']);
 crudRoutes('vendas',         ['cliente_id','cliente','fruta','quantidade','quantidade_kg','valor','data','pedido_id','origem']);
+
+// ── CUSTOM DELETE VENDA: restaura estoque ──
+app.delete('/api/vendas/:id/completo', auth, async (req, res) => {
+  const venda = await db.get('SELECT * FROM vendas WHERE id = ?', req.params.id);
+  if (!venda) return res.status(404).json({ erro: 'Venda não encontrada' });
+
+  // If venda linked to pedido, restore the pedido's lotes to stock
+  if (venda.pedido_id) {
+    const pedido = await db.get('SELECT * FROM pedidos WHERE id = ?', venda.pedido_id);
+    if (pedido && pedido.lotes && pedido.lotes !== 'A definir pela produção') {
+      const parts = pedido.lotes.split(',');
+      for (const part of parts) {
+        const m = part.trim().match(/^(.+?)\((\d+)(?:cx\/?(\d+)?kg?)?\)$/);
+        if (m) {
+          const loteName = m[1].trim();
+          const qtd = parseInt(m[2]);
+          const entrada = await db.get('SELECT * FROM entradas WHERE lote = ?', loteName);
+          if (entrada) {
+            const novoSaldo = (entrada.quantidade_atual || 0) + qtd;
+            await db.run('UPDATE entradas SET quantidade_atual = ?, status = ? WHERE lote = ?',
+              novoSaldo, novoSaldo > 0 ? 'disponivel' : 'esgotado', loteName);
+          }
+        }
+      }
+      // Reset pedido status to Pendente
+      await db.run("UPDATE pedidos SET status = 'Pendente', lotes = 'A definir pela produção' WHERE id = ?", venda.pedido_id);
+    }
+  }
+
+  await db.run('DELETE FROM vendas WHERE id = ?', req.params.id);
+  fazerBackup('del-venda-completo');
+  res.json({ ok: true });
+});
 crudRoutes('retornos_caixa', ['cliente_id','data','quantidade','marca','obs']);
 crudRoutes('saidas_caixa',   ['cliente_id','data','quantidade','marca','obs']);
 crudRoutes('pagamentos',     ['cliente_id','valor','data','forma','recebedor','obs']);
