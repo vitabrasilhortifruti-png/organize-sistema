@@ -981,6 +981,25 @@ function renderEntrada() {
     <div style="margin-bottom:10px;"><label class="lbl">Observações</label><input class="inp" id="en-obs" placeholder="Observações opcionais"></div>
     <div style="display:flex;gap:8px;"><button class="btn btn-p" onclick="addEntrada()"><i data-lucide="plus" style="width:13px;height:13px;"></i> Registrar Entrada</button><button class="btn btn-s" onclick="limparForm(['en-lote','en-qtd','en-peso','en-obs','en-total-kg'])">🗑 Limpar</button></div>
   </div>
+  <div class="card" style="margin-bottom:10px;">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span style="font-size:11px;color:var(--sub);font-weight:600;">🔍 Filtros:</span>
+      <label style="font-size:10px;color:var(--muted);">De:</label>
+      <input class="inp" id="ent-f-ini" type="date" style="max-width:140px;" oninput="filtrarEntradas()">
+      <label style="font-size:10px;color:var(--muted);">Até:</label>
+      <input class="inp" id="ent-f-fim" type="date" style="max-width:140px;" oninput="filtrarEntradas()">
+      <select class="inp" id="ent-f-forn" style="max-width:160px;" onchange="filtrarEntradas()">
+        <option value="">Todos fornecedores</option>
+        \${DB.fornecedores.map(f=>\`<option value="\${f.id}">\${f.nome}</option>\`).join('')}
+      </select>
+      <select class="inp" id="ent-f-fruta" style="max-width:130px;" onchange="filtrarEntradas()">
+        <option value="">Todas frutas</option>
+        \${[...new Set(DB.entradas.map(e=>e.fruta))].map(f=>\`<option>\${f}</option>\`).join('')}
+      </select>
+      <button class="btn btn-s btn-sm" onclick="limparFiltrosEntradas()">✕ Limpar</button>
+      <button class="btn btn-p btn-sm" onclick="imprimirRelatorioEntradas()">🖨️ Relatório</button>
+    </div>
+  </div>
   <div class="card">
     <div class="section-title">Entradas (${DB.entradas.length})</div>
     <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Lote</th><th>Fruta</th><th>Fornecedor</th><th>Qtd Orig.</th><th>Saldo</th><th>Total KG</th><th>Data</th><th></th></tr></thead><tbody>
@@ -3020,6 +3039,140 @@ function imprimirRelatorioProducao() {
   win.document.close();
 }
 
+
+
+// ── CABEÇALHO PADRÃO PARA TODAS AS IMPRESSÕES ──────────
+function cabecalhoPadrao(titulo) {
+  var emp = DB.empresa || {};
+  var logoHtml = emp.logo ? '<img src="'+emp.logo+'" style="height:40px;width:40px;object-fit:contain;border-radius:4px;" >' : '<div style="width:40px;height:40px;background:#f97316;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:16px;">'+(emp.nome||'O').charAt(0)+'</div>';
+  return '<div style="display:flex;align-items:center;gap:10px;border-bottom:2px solid #f97316;padding-bottom:8px;margin-bottom:14px;">'
+    +logoHtml
+    +'<div style="flex:1;">'
+    +'<div style="font-size:14px;font-weight:800;color:#333;">'+(emp.nome||'Organize')+'</div>'
+    +'<div style="font-size:11px;font-weight:700;color:#f97316;">'+titulo+'</div>'
+    +'</div>'
+    +'<div style="text-align:right;font-size:9px;color:#999;">'
+    +new Date().toLocaleString('pt-BR')
+    +'</div>'
+    +'</div>';
+}
+
+function rodapePadrao() {
+  var emp = DB.empresa || {};
+  return '<div style="margin-top:16px;padding-top:8px;border-top:1px solid #eee;font-size:9px;color:#999;display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;">'
+    +(emp.endereco?'<span>📍 '+emp.endereco+'</span>':'')
+    +(emp.telefone?'<span>📞 '+emp.telefone+'</span>':'')
+    +(emp.email?'<span>✉️ '+emp.email+'</span>':'')
+    +'<span>'+new Date().toLocaleDateString('pt-BR')+'</span>'
+    +'</div>';
+}
+
+function abrirJanelaComConteudo(titulo, corpoHTML) {
+  var win = window.open('', '_blank', 'width=900,height=700');
+  win.document.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">'
+    +'<title>'+titulo+'</title>'
+    +'<style>*{box-sizing:border-box;margin:0;padding:0;}'
+    +'body{font-family:Arial,sans-serif;font-size:11px;color:#111;padding:16px;background:#fff;}'
+    +'.sec{margin-bottom:12px;padding:10px;border:1px solid #ddd;border-radius:5px;}'
+    +'.sec h3{font-size:10px;font-weight:700;color:#f97316;text-transform:uppercase;margin-bottom:6px;}'
+    +'.row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px;}'
+    +'.f{flex:1;min-width:80px;}.fl{font-size:9px;color:#888;text-transform:uppercase;}.fv{font-size:11px;font-weight:700;}'
+    +'table{width:100%;border-collapse:collapse;margin-top:6px;font-size:10px;}'
+    +'th{background:#f97316;color:#fff;padding:5px 6px;text-align:left;}'
+    +'td{padding:5px 6px;border-bottom:1px solid #eee;}'
+    +'tr:nth-child(even) td{background:#fafafa;}'
+    +'.np{margin-top:12px;display:flex;gap:6px;}@media print{.np{display:none!important;}}'
+    +'</style></head><body>'
+    +corpoHTML
+    +'<div class="np">'
+    +'<button onclick="window.print()" style="background:#f97316;color:#fff;border:none;padding:7px 14px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;">🖨️ Imprimir</button>'
+    +'<button onclick="window.print()" style="background:#10b981;color:#fff;border:none;padding:7px 14px;border-radius:4px;font-size:12px;cursor:pointer;">📄 PDF</button>'
+    +'<button onclick="window.close()" style="background:#eee;color:#333;border:none;padding:7px 14px;border-radius:4px;font-size:12px;cursor:pointer;">✕ Fechar</button>'
+    +'</div></body></html>');
+  win.document.close();
+}
+
+// ── FILTROS ENTRADAS ────────────────────────────────────
+function getEntradasFiltradas() {
+  var ini  = (document.getElementById('ent-f-ini') ||{}).value || '';
+  var fim  = (document.getElementById('ent-f-fim') ||{}).value || '';
+  var forn = (document.getElementById('ent-f-forn')||{}).value || '';
+  var fruta= (document.getElementById('ent-f-fruta')||{}).value|| '';
+  return DB.entradas.filter(function(e){
+    if(ini  && e.data < ini) return false;
+    if(fim  && e.data > fim) return false;
+    if(forn && e.fornecedor_id !== forn) return false;
+    if(fruta&& e.fruta !== fruta) return false;
+    return true;
+  });
+}
+
+function limparFiltrosEntradas() {
+  ['ent-f-ini','ent-f-fim','ent-f-forn','ent-f-fruta'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.value='';
+  });
+  filtrarEntradas();
+}
+
+function filtrarEntradas() {
+  var lista = getEntradasFiltradas();
+  var cntEl = document.getElementById('ent-count');
+  if(cntEl) cntEl.textContent = lista.length;
+  var tbody = document.getElementById('ent-tbody');
+  if(!tbody) return;
+  if(lista.length===0){tbody.innerHTML='<tr><td colspan="8" class="empty">Nenhuma entrada encontrada</td></tr>';return;}
+  tbody.innerHTML = lista.map(function(e){
+    var forn = DB.fornecedores.find(function(f){return f.id===e.fornecedor_id;});
+    var saldo = e.quantidade_atual!=null?e.quantidade_atual:e.quantidade;
+    return '<tr>'
+      +'<td><span class="badge bo" style="cursor:pointer;" data-eid="'+e.id+'" onclick="abrirDetalheEntrada(this.dataset.eid)" title="Detalhes">🔍 '+e.lote+'</span></td>'
+      +'<td style="font-weight:600;color:var(--text)">'+e.fruta+'</td>'
+      +'<td>'+(forn?forn.nome:'-')+'</td>'
+      +'<td>'+e.quantidade+'</td>'
+      +'<td><strong style="color:'+(saldo>0?'var(--green)':'var(--red)')+'">'+saldo+'</strong></td>'
+      +'<td>'+(e.total_kg||0).toFixed(1)+' kg</td>'
+      +'<td>'+fmtDate(e.data)+'</td>'
+      +'<td style="display:flex;gap:4px;">'
+      +'<button class="btn btn-s btn-sm" data-eid="'+e.id+'" onclick="abrirDetalheEntrada(this.dataset.eid)" title="Detalhes">🔍</button>'
+      +'<button class="btn btn-r btn-sm" data-eid="'+e.id+'" onclick="delEntrada(this.dataset.eid)"><i data-lucide="trash-2" style="width:12px;height:12px;"></i></button>'
+      +'</td></tr>';
+  }).join('');
+  lucide.createIcons();
+}
+
+function imprimirRelatorioEntradas() {
+  var lista = getEntradasFiltradas();
+  var ini  = (document.getElementById('ent-f-ini') ||{}).value||'';
+  var fim  = (document.getElementById('ent-f-fim') ||{}).value||'';
+  var totalKg = lista.reduce(function(s,e){return s+(e.total_kg||0);},0);
+  var totalSaldo = lista.reduce(function(s,e){var sd=e.quantidade_atual!=null?e.quantidade_atual:e.quantidade;return s+sd*(e.peso_unitario||1);},0);
+  var titulo = 'Relatório de Entradas'+(ini||fim?' ('+fmtDate(ini)+' a '+fmtDate(fim)+')':'');
+  var corpo = cabecalhoPadrao(titulo)
+    +'<div style="display:flex;gap:12px;margin-bottom:12px;">'
+    +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div style="font-size:9px;color:#888;">Registros</div><div style="font-size:16px;font-weight:800;color:#f97316;">'+lista.length+'</div></div>'
+    +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div style="font-size:9px;color:#888;">KG Entrado</div><div style="font-size:16px;font-weight:800;color:#f97316;">'+totalKg.toFixed(0)+' kg</div></div>'
+    +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div style="font-size:9px;color:#888;">KG em Saldo</div><div style="font-size:16px;font-weight:800;color:#10b981;">'+totalSaldo.toFixed(0)+' kg</div></div>'
+    +'</div>'
+    +'<table><thead><tr><th>Lote</th><th>Fruta</th><th>Fornecedor</th><th>Data</th><th>Qtd Orig.</th><th>KG Total</th><th>Saldo</th><th>Tipo</th><th>Status</th></tr></thead><tbody>'
+    +lista.map(function(e){
+      var forn = DB.fornecedores.find(function(f){return f.id===e.fornecedor_id;});
+      var saldo = e.quantidade_atual!=null?e.quantidade_atual:e.quantidade;
+      return '<tr>'
+        +'<td style="font-weight:700;color:#f97316;">'+e.lote+'</td>'
+        +'<td>'+e.fruta+'</td>'
+        +'<td>'+(forn?forn.nome:'-')+'</td>'
+        +'<td>'+fmtDate(e.data)+'</td>'
+        +'<td>'+e.quantidade+'</td>'
+        +'<td>'+( e.total_kg||0).toFixed(1)+' kg</td>'
+        +'<td style="color:'+(saldo>0?'#10b981':'#ef4444')+';font-weight:700;">'+saldo+'</td>'
+        +'<td>'+(e.tipo||'kg')+'</td>'
+        +'<td>'+(e.status||'disponivel')+'</td>'
+        +'</tr>';
+    }).join('')+'</tbody></table>'
+    +rodapePadrao();
+  abrirJanelaComConteudo(titulo, corpo);
+}
 
 </script>
 </body>

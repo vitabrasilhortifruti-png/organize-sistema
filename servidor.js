@@ -323,31 +323,43 @@ crudRoutes('pedidos',        ['cliente_id','cliente_nome','fruta','mercadoria_id
 app.delete('/api/vendas/:id/completo', auth, async (req, res) => {
   const venda = await db.get('SELECT * FROM vendas WHERE id = ?', req.params.id);
   if(!venda) return res.status(404).json({ erro: 'Venda não encontrada' });
-  // If venda has pedido_id, restore stock via pedido route logic
+
+  // Restore stock via pedido lotes
   if(venda.pedido_id) {
-    const ped = await db.get('SELECT * FROM pedidos WHERE id = ?', venda.pedido_id);
-    if(ped && ped.lotes && ped.status === 'Atendido') {
-      const loteParts = ped.lotes.split(',');
-      for(const part of loteParts) {
-        const m = part.trim().match(/^(.+?)\((\d+)cx\/(\d+)kg\)$/) || part.trim().match(/^(.+?)\((\d+)\)$/);
+    const pedido = await db.get('SELECT * FROM pedidos WHERE id = ?', venda.pedido_id);
+    if(pedido && pedido.lotes && pedido.lotes !== 'A definir pela produção') {
+      const parts = pedido.lotes.split(',');
+      for(const part of parts) {
+        const raw = part.trim();
+        const m1 = raw.match(/^(.+?)\((\d+)cx\/(\d+(?:\.\d+)?)kg\)$/);
+        const m2 = raw.match(/^(.+?)\((\d+)(?:cx)?\)$/);
+        const m = m1 || m2;
         if(m) {
           const loteName = m[1].trim();
-          const qtdUsada = parseInt(m[2]);
+          const qtdCx = parseInt(m[2]);
+          const kgUsado = m1 ? parseFloat(m1[3]) : null;
           const entrada = await db.get('SELECT * FROM entradas WHERE lote = ?', loteName);
           if(entrada) {
-            const novoSaldo = (entrada.quantidade_atual || 0) + qtdUsada;
+            const tipoLote = (entrada.tipo || 'kg').toLowerCase();
+            const restoreQty = (tipoLote === 'kg' && kgUsado)
+              ? kgUsado
+              : (tipoLote === 'kg' ? qtdCx * (entrada.peso_unitario || 1) : qtdCx);
+            const novoSaldo = (entrada.quantidade_atual || 0) + restoreQty;
             await db.run('UPDATE entradas SET quantidade_atual = ?, status = ? WHERE lote = ?',
-              novoSaldo, novoSaldo > 0 ? 'disponivel' : 'esgotado', loteName);
+              novoSaldo, 'disponivel', loteName);
           }
         }
       }
-      await db.run('UPDATE pedidos SET status = ? WHERE id = ?', 'Pendente', venda.pedido_id);
+      // Reset pedido to Pendente
+      await db.run("UPDATE pedidos SET status = 'Pendente', lotes = 'A definir pela produção' WHERE id = ?", venda.pedido_id);
     }
   }
+
   await db.run('DELETE FROM vendas WHERE id = ?', req.params.id);
   fazerBackup('del-venda-completo');
   res.json({ ok: true });
 });
+
 
 // ── CUSTOM DELETE PEDIDO: restaura estoque + exclui venda ──
 // Override the generic delete for pedidos
