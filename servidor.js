@@ -128,6 +128,28 @@ app.use(express.static(__dirname));
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'organize.html'));
 });
+// PWA files
+app.get('/manifest.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/manifest+json');
+  res.sendFile(path.join(__dirname, 'manifest.json'));
+});
+app.get('/sw.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Service-Worker-Allowed', '/');
+  res.sendFile(path.join(__dirname, 'sw.js'));
+});
+app.get('/icon-:size.svg', (req, res) => {
+  var file = path.join(__dirname, 'icon-'+req.params.size+'.svg');
+  var fs2 = require('fs');
+  if(fs2.existsSync(file)) { res.setHeader('Content-Type','image/svg+xml'); res.sendFile(file); }
+  else { res.setHeader('Content-Type','image/svg+xml'); res.sendFile(path.join(__dirname,'icon-192.svg')); }
+});
+app.get('/icon-:size.png', (req, res) => {
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.sendFile(path.join(__dirname, 'icon-192.svg'));
+});
+
+
 
 const sessions = new Map();
 
@@ -366,39 +388,57 @@ app.delete('/api/vendas/:id/completo', auth, async (req, res) => {
 app.delete('/api/pedidos/:id/completo', auth, async (req, res) => {
   if (!['admin','gerente','operador'].includes(req.usuario.acesso))
     return res.status(403).json({ erro: 'Sem permissão' });
-  
+
   const pedido = await db.get('SELECT * FROM pedidos WHERE id = ?', req.params.id);
   if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado' });
 
-  // 1. Restore stock if pedido was Atendido and has lotes
-  if (pedido.status === 'Atendido' && pedido.lotes && pedido.lotes !== 'A definir pela produção') {
-    // Parse lotes: format "LOTE01(50), LOTE02(30)" or "LOTE01, LOTE02"
+  // ── 1. RESTAURAR ESTOQUE (sempre, mesmo se esgotado) ──
+  if (pedido.lotes && pedido.lotes !== 'A definir pela produção') {
     const loteParts = pedido.lotes.split(',');
     for (const part of loteParts) {
-      const m = part.trim().match(/^(.+?)\((\d+)\)$/);
+      const raw = part.trim();
+      // Suporta: "LOTE(100cx/2000kg)" ou "LOTE(100cx)" ou "LOTE(100)"
+      const m = raw.match(/^(.+?)\((\d+)(?:cx)?\/?([\d.]+)?kg?\)$/) || raw.match(/^(.+?)\((\d+)\)$/);
       if (m) {
         const loteName = m[1].trim();
-        const qtdUsada = parseInt(m[2]);
-        const entrada = await db.get('SELECT * FROM entradas WHERE lote = ?', loteName);
+        const qtdCx    = parseInt(m[2]) || 0;
+        const kgUsado  = m[3] ? parseFloat(m[3]) : null;
+        const entrada  = await db.get('SELECT * FROM entradas WHERE lote = ?', loteName);
         if (entrada) {
-          const novoSaldo = (entrada.quantidade_atual || 0) + qtdUsada;
-          const novoStatus = novoSaldo > 0 ? 'disponivel' : 'esgotado';
-          await db.run('UPDATE entradas SET quantidade_atual = ?, status = ? WHERE lote = ?',
-            novoSaldo, novoStatus, loteName);
+          const tipoLote   = (entrada.tipo || 'kg').toLowerCase();
+          const restoreQty = (tipoLote === 'kg' && kgUsado)
+            ? kgUsado
+            : (tipoLote === 'kg' ? qtdCx * (entrada.peso_unitario || 1) : qtdCx);
+          const novoSaldo  = (entrada.quantidade_atual || 0) + restoreQty;
+          await db.run(
+            'UPDATE entradas SET quantidade_atual = ?, status = ? WHERE lote = ?',
+            novoSaldo, 'disponivel', loteName
+          );
         }
       }
     }
   }
 
-  // 2. Delete linked venda
+  // ── 2. EXCLUIR ROMANEIOS VINCULADOS ──
+  await db.run('DELETE FROM romaneios WHERE pedido_id = ?', req.params.id);
+  // Romaneios com múltiplos pedidos (formato: "id1,id2,id3")
+  const todosRom = await db.all('SELECT * FROM romaneios');
+  for (const rom of todosRom) {
+    if (rom.pedido_id && rom.pedido_id.split(',').map(s=>s.trim()).includes(req.params.id)) {
+      await db.run('DELETE FROM romaneios WHERE id = ?', rom.id);
+    }
+  }
+
+  // ── 3. EXCLUIR VENDA VINCULADA ──
   await db.run('DELETE FROM vendas WHERE pedido_id = ?', req.params.id);
 
-  // 3. Delete the pedido
+  // ── 4. EXCLUIR O PEDIDO ──
   await db.run('DELETE FROM pedidos WHERE id = ?', req.params.id);
-  
+
   fazerBackup('del-pedido-completo');
   res.json({ ok: true });
 });
+
 crudRoutes('romaneios',      ['numero','pedido_id','cliente_nome','fruta','motorista','placa','caixas','qualidade','rota','obs','data']);
 crudRoutes('vendas',         ['cliente_id','cliente','fruta','quantidade','quantidade_kg','valor','data','pedido_id','origem']);
 
