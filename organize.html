@@ -502,14 +502,26 @@ async function abaterLoteKg(lote_id, unidades, pesoUnitario) {
   var e = DB.entradas.find(function(x){return x.id===lote_id;});
   if (!e) return;
   var saldoAtual = e.quantidade_atual != null ? e.quantidade_atual : e.quantidade;
-  // Abate in units (caixas/sacos)
-  e.quantidade_atual = Math.max(0, saldoAtual - unidades);
-  var status = e.quantidade_atual === 0 ? 'esgotado' : 'disponivel';
+  var kgAbatido = unidades * (pesoUnitario || 1);
+  
+  // Se o lote é em KG (tipo=kg ou peso_unitario=1), abate em KG
+  // Se o lote é em CAIXA/SACO, abate em unidades
+  var tipoLote = (e.tipo || 'kg').toLowerCase();
+  var novoSaldo;
+  if (tipoLote === 'kg') {
+    // Lote registrado em KG: abate kgAbatido direto
+    novoSaldo = Math.max(0, saldoAtual - kgAbatido);
+  } else {
+    // Lote registrado em CAIXA ou SACO: abate em unidades
+    novoSaldo = Math.max(0, saldoAtual - unidades);
+  }
+  
+  e.quantidade_atual = novoSaldo;
+  var status = novoSaldo === 0 ? 'esgotado' : 'disponivel';
   e.status = status;
-  // KG abatido = qtd × peso unitário do PEDIDO (não do lote)
-  var kgAbatido = unidades * (pesoUnitario || e.peso_unitario || 1);
+  
   await PATCH('/api/entradas/'+lote_id+'/saldo', {
-    quantidade_atual: e.quantidade_atual,
+    quantidade_atual: novoSaldo,
     status: status,
     kg_abatido: kgAbatido
   });
@@ -1321,7 +1333,14 @@ async function modalAtenderPedido(id) {
           + '<input type="checkbox" class="lat-cb" value="'+l.id+'" data-lote="'+l.lote+'" data-saldo="'+saldo+'" style="accent-color:var(--accent);width:16px;height:16px;" onchange="autoFillQtdLote(this)">'
           + '<div style="flex:1;">'
           + '<div style="font-size:12px;font-weight:700;color:var(--text)">'+l.lote+' — '+l.fruta+'</div>'
-          + '<div style="font-size:10px;color:var(--muted);">Saldo: <strong style="color:var(--green)">'+saldo+' cx</strong> = <strong style="color:var(--accent)">'+saldoKg.toFixed(0)+' kg</strong> ('+pesoKgCx+'kg/cx)</div>'
+          + (function(){
+            var tipoL = (l.tipo||'kg').toLowerCase();
+            if(tipoL==='kg') {
+              return '<div style="font-size:10px;color:var(--muted);">Saldo: <strong style="color:var(--green)">'+saldo.toFixed(0)+' kg</strong> disponível</div>';
+            } else {
+              return '<div style="font-size:10px;color:var(--muted);">Saldo: <strong style="color:var(--green)">'+saldo+' '+tipoL+'</strong> = <strong style="color:var(--accent)">'+saldoKg.toFixed(0)+' kg</strong> ('+pesoKgCx+'kg/'+tipoL+')</div>';
+            }
+          })()
           + '</div>'
           + '<div style="text-align:center;">'
           + '<div style="font-size:9px;color:var(--muted);margin-bottom:2px;">Qtd (cx)</div>'
@@ -2793,57 +2812,68 @@ function imprimirPedidosFiltrados() {
 }
 
 function imprimirRelatorioProducao() {
-  var pendentes = DB.pedidos.filter(function(p){return p.status==='Pendente';});
-  if(pendentes.length === 0) { toast('Nenhum pedido pendente!','warn'); return; }
-  pendentes.sort(function(a,b){return a.data_entrega.localeCompare(b.data_entrega);});
-  var totalCx = pendentes.reduce(function(s,p){return s+p.quantidade;},0);
-  var totalKg = pendentes.reduce(function(s,p){return s+(p.quantidade_kg||0);},0);
-
-  // Group by fruta
-  var byFruta = {};
-  pendentes.forEach(function(p){
-    if(!byFruta[p.fruta]) byFruta[p.fruta] = {cx:0,kg:0,pedidos:[]};
-    byFruta[p.fruta].cx += p.quantidade;
-    byFruta[p.fruta].kg += p.quantidade_kg||0;
-    byFruta[p.fruta].pedidos.push(p);
-  });
-
-  var resumoFruta = Object.keys(byFruta).map(function(f){
-    return '<tr><td style="font-weight:700">'+f+'</td><td>'+byFruta[f].cx+' cx</td><td style="color:#f97316;font-weight:700">'+byFruta[f].kg.toFixed(0)+' kg</td><td>'+byFruta[f].pedidos.length+' pedido(s)</td></tr>';
-  }).join('');
-
-  var rows = pendentes.map(function(p, i){
-    var atrasado = p.data_entrega < today();
-    return '<tr style="'+(atrasado?'background:#fff5f5;':i%2===0?'':'background:#f9f9f9;')+'">'
-      +'<td style="font-weight:700;color:'+(atrasado?'#ef4444':'#111')+';">'+(i+1)+'</td>'
-      +'<td style="font-weight:700">'+p.cliente_nome+'</td>'
-      +'<td style="font-weight:700;color:#f97316;">'+p.fruta+'</td>'
-      +'<td style="text-align:center;">'+p.quantidade+' cx</td>'
-      +'<td style="text-align:center;font-weight:700;color:#f97316;">'+(p.quantidade_kg||0).toFixed(0)+' kg</td>'
-      +'<td>'+p.mercadoria_nome+'</td>'
-      +'<td>'+p.bancas+'</td>'
-      +'<td style="color:'+(atrasado?'#ef4444':'#111')+';font-weight:'+(atrasado?'700':'400')+';">'
-      +fmtDate(p.data_entrega)+(atrasado?' ⚠️ ATRASADO':'')+'</td>'
-      +'<td>'+(p.obs||'-')+'</td>'
-      +'</tr>';
-  }).join('');
-
-  var html = '<div class="pt">🏭 Relatório de Produção — Pedidos Pendentes</div>'
-    +'<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:10px;margin-bottom:14px;font-size:12px;">'
-    +'<strong>Data/hora:</strong> '+new Date().toLocaleString('pt-BR')
-    +' &nbsp;|&nbsp; <strong>'+pendentes.length+' pedidos pendentes</strong>'
-    +' &nbsp;|&nbsp; <strong>'+totalCx+' caixas</strong>'
-    +' &nbsp;|&nbsp; <strong style="color:#f97316;">'+totalKg.toFixed(0)+' kg</strong>'
+  var peds = DB.pedidos.filter(function(p){return p.status==='Pendente';})
+    .sort(function(a,b){return a.data_entrega.localeCompare(b.data_entrega);});
+  var totalCx = peds.reduce(function(s,p){return s+p.quantidade;},0);
+  var totalKg = peds.reduce(function(s,p){return s+(p.quantidade_kg||0);},0);
+  var totalPal = peds.reduce(function(s,p){return s+Math.ceil(p.quantidade/30);},0);
+  var hoje = today();
+  var empNome = (DB.empresa && DB.empresa.nome) ? DB.empresa.nome : 'Organize';
+  var win = window.open('', '_blank', 'width=900,height=700');
+  win.document.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">'
+    +'<title>Relatório de Produção</title>'
+    +'<style>*{box-sizing:border-box;margin:0;padding:0;}'
+    +'body{font-family:Arial,sans-serif;font-size:11px;color:#111;padding:15px;}'
+    +'.topo{display:flex;justify-content:space-between;border-bottom:1px solid #ccc;padding-bottom:6px;margin-bottom:10px;}'
+    +'.tnome{font-size:12px;font-weight:700;color:#333;}.tdata{font-size:9px;color:#999;text-align:right;}'
+    +'.titulo{font-size:13px;font-weight:800;margin-bottom:8px;color:#f97316;border-left:3px solid #f97316;padding-left:6px;}'
+    +'.res{display:flex;gap:10px;padding:8px;background:#f9f9f9;border:1px solid #eee;border-radius:4px;margin-bottom:10px;}'
+    +'.ri{text-align:center;flex:1;}.rl{font-size:9px;color:#888;}.rv{font-size:13px;font-weight:800;color:#f97316;}'
+    +'table{width:100%;border-collapse:collapse;font-size:10px;}'
+    +'th{background:#333;color:#fff;padding:5px 5px;text-align:left;}'
+    +'td{padding:5px 5px;border-bottom:1px solid #eee;}'
+    +'tr:nth-child(even) td{background:#fafafa;}'
+    +'.atr td{background:#fff0f0!important;color:#c00;}'
+    +'.rod{margin-top:16px;padding:8px 10px;border:1px dashed #ccc;display:flex;justify-content:space-between;font-size:10px;color:#888;}'
+    +'.np{margin-top:10px;display:flex;gap:8px;}@media print{.np{display:none!important;}}'
+    +'</style></head><body>'
+    +'<div class="topo"><span class="tnome">'+empNome+'</span>'
+    +'<span class="tdata">Rel. Produção &nbsp;|&nbsp; '+new Date().toLocaleString('pt-BR')+'</span></div>'
+    +'<div class="titulo">📋 Pedidos Pendentes — Produção</div>'
+    +'<div class="res">'
+    +'<div class="ri"><div class="rl">Pedidos</div><div class="rv">'+peds.length+'</div></div>'
+    +'<div class="ri"><div class="rl">Total Caixas</div><div class="rv">'+totalCx+'</div></div>'
+    +'<div class="ri"><div class="rl">Total KG</div><div class="rv">'+totalKg.toFixed(0)+' kg</div></div>'
+    +'<div class="ri"><div class="rl">Paletes</div><div class="rv">'+totalPal+' pal</div></div>'
     +'</div>'
-    +'<div class="sec"><h3>Resumo por Fruta</h3>'
-    +'<table><tr><th>Fruta</th><th>Total Caixas</th><th>Total KG</th><th>Pedidos</th></tr>'+resumoFruta+'</table></div>'
-    +'<div class="sec"><h3>Pedidos a Produzir (ordenados por entrega)</h3>'
-    +'<table><tr><th>#</th><th>Cliente</th><th>Fruta</th><th>Qtd</th><th>KG</th><th>Mercadoria</th><th>Bancas/Calibre</th><th>Entrega</th><th>Obs</th></tr>'
-    +rows+'</table></div>'
-    +'<div style="margin-top:20px;padding:10px;border:1px dashed #ccc;border-radius:6px;">'
-    +'<strong>Conferência:</strong> ________ &nbsp;&nbsp;&nbsp; <strong>Responsável:</strong> ________________________ &nbsp;&nbsp;&nbsp; <strong>Assinatura:</strong> ________________________'
-    +'</div>';
-  abrirJanelaImpressao('Relatório de Produção', html);
+    +(peds.length===0
+      ? '<p style="text-align:center;color:green;padding:20px;">✅ Nenhum pedido pendente!</p>'
+      : '<table><thead><tr><th>#</th><th>Cliente</th><th>Produto / Embalagem</th><th>Qtd Cx</th><th>KG Total</th><th>Paletes</th><th>Banca/Calibre</th><th>Entrega</th></tr></thead><tbody>'
+        +peds.map(function(p,i){
+          var pal = Math.ceil(p.quantidade/30);
+          var atrasado = p.data_entrega < hoje;
+          return '<tr class="'+(atrasado?'atr':'')+'">'
+            +'<td style="font-weight:800;text-align:center;">'+(i+1)+'</td>'
+            +'<td style="font-weight:700;">'+p.cliente_nome+'</td>'
+            +'<td>'+(p.mercadoria_nome||p.fruta)+'</td>'
+            +'<td style="text-align:center;font-weight:700;">'+p.quantidade+'</td>'
+            +'<td style="text-align:center;font-weight:700;">'+(p.quantidade_kg||0).toFixed(0)+' kg</td>'
+            +'<td style="text-align:center;font-weight:700;">'+pal+'</td>'
+            +'<td>'+(p.bancas||'-')+'</td>'
+            +'<td>'+(atrasado?'⚠️ ':'')+fmtDate(p.data_entrega)+'</td>'
+            +'</tr>';
+        }).join('')+'</tbody></table>')
+    +'<div class="rod">'
+    +'<span>Responsável: _________________________</span>'
+    +'<span>Data: ___/___/______</span>'
+    +'<span>Conf.: _____________</span>'
+    +'</div>'
+    +'<div class="np">'
+    +'<button onclick="window.print()" style="background:#f97316;color:#fff;border:none;padding:7px 14px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;">🖨️ Imprimir</button>'
+    +'<button onclick="window.print()" style="background:#10b981;color:#fff;border:none;padding:7px 14px;border-radius:4px;font-size:12px;cursor:pointer;">📄 PDF</button>'
+    +'<button onclick="window.close()" style="background:#eee;color:#333;border:none;padding:7px 14px;border-radius:4px;font-size:12px;cursor:pointer;">✕ Fechar</button>'
+    +'</div></body></html>');
+  win.document.close();
 }
 
 

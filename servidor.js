@@ -429,8 +429,19 @@ crudRoutes('descartes',      ['lote_id','lote','fruta','quantidade','motivo','da
 
 // ── SALDO LOTE ───────────────────────────────────────────
 app.patch('/api/entradas/:id/saldo', auth, async (req, res) => {
-  const { quantidade_atual, status } = req.body;
-  await db.run('UPDATE entradas SET quantidade_atual = ?, status = ? WHERE id = ?', quantidade_atual, status||'disponivel', req.params.id);
+  const { quantidade_atual, status, kg_abatido } = req.body;
+  const entrada = await db.get('SELECT * FROM entradas WHERE id = ?', req.params.id);
+  if (!entrada) return res.status(404).json({ erro: 'Lote não encontrado' });
+  
+  if (kg_abatido && kg_abatido > 0 && entrada.peso_unitario && entrada.peso_unitario > 0) {
+    // Abate by KG: convert kg to units using lote's peso_unitario
+    // quantidade_atual from client is in units - use it directly
+    await db.run('UPDATE entradas SET quantidade_atual = ?, status = ? WHERE id = ?',
+      quantidade_atual, status || 'disponivel', req.params.id);
+  } else {
+    await db.run('UPDATE entradas SET quantidade_atual = ?, status = ? WHERE id = ?',
+      quantidade_atual, status || 'disponivel', req.params.id);
+  }
   fazerBackup('saldo-lote');
   res.json({ ok: true });
 });
