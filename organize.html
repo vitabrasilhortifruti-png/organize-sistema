@@ -715,6 +715,22 @@ function renderEmpresa() {
     <button class="btn btn-p" onclick="salvarEmpresa()">&#128190; Salvar</button>
   </div>`;
   lucide.createIcons();
+  renderEstoqueFiltrado();
+  // Inject descarte section
+  setTimeout(function(){
+    var contentEl = document.getElementById('content');
+    if(contentEl && !document.getElementById('descartes-list')) {
+      var div = document.createElement('div');
+      div.className = 'card';
+      div.style.marginTop = '12px';
+      div.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
+        +'<div class="section-title" style="margin:0;">🗑️ Histórico de Descartes</div>'
+        +'<button class="btn btn-p btn-sm" onclick="imprimirRelatorioDescartes()">🖨️ Relatório</button>'
+        +'</div><div id="descartes-list"></div>';
+      contentEl.appendChild(div);
+      renderDescartesList();
+    }
+  }, 50);
 }
 async function salvarEmpresa() {
   const data = {
@@ -2130,6 +2146,7 @@ function renderEstoque() {
       <td style="display:flex;gap:4px;align-items:center;">
         <span class="badge ${s.saldo>0?'bg':'br'}">${s.saldo>0?'✓ Disponível':'✗ Esgotado'}</span>
         <button class="btn btn-s btn-sm" onclick="abrirDetalheEntrada('${s.id}')" title="Detalhes">🔍</button>
+        <button class="btn btn-r btn-sm" onclick="modalDescarte('${s.id}','${s.lote}','${s.fruta}')" title="Registrar Descarte" style="background:rgba(239,68,68,.15);border-color:var(--red);">🗑️</button>
       </td>
     </tr>`).join('')||'<tr><td colspan="8" class="empty">Nenhum lote</td></tr>'}
     </tbody></table></div>
@@ -3147,6 +3164,7 @@ function filtrarEntradas() {
       +'<td>'+fmtDate(e.data)+'</td>'
       +'<td style="display:flex;gap:4px;">'
       +'<button class="btn btn-s btn-sm" data-eid="'+e.id+'" onclick="abrirDetalheEntrada(this.dataset.eid)" title="Detalhes">🔍</button>'
+      +'<button class="btn btn-r btn-sm" data-lote="'+e.lote+'" data-fruta="'+e.fruta+'" data-eid="'+e.id+'" onclick="modalDescarte(this.dataset.eid,this.dataset.lote,this.dataset.fruta)" title="Registrar Descarte" style="background:rgba(239,68,68,.15);border-color:#ef4444;color:#ef4444;">🗑️</button>'
       +'<button class="btn btn-r btn-sm" data-eid="'+e.id+'" onclick="delEntrada(this.dataset.eid)"><i data-lucide="trash-2" style="width:12px;height:12px;"></i></button>'
       +'</td></tr>';
   }).join('');
@@ -3216,6 +3234,155 @@ function imprimirRelatorioEntradas() {
         });
       }
     }
-  </script>
+  
+// ── DESCARTE ─────────────────────────────────────────────
+function modalDescarte(entradaId, lote, fruta) {
+  var e = DB.entradas.find(function(x){return x.id===entradaId;});
+  if(!e) return toast('Lote não encontrado','err');
+  var saldo = e.quantidade_atual!=null ? e.quantidade_atual : e.quantidade;
+  var tipoLabel = (e.tipo||'kg').toLowerCase()==='kg' ? 'kg' : 'caixas';
+  window._descarteEntradaId = entradaId;
+
+  modal(
+    '<div class="section-title" style="color:var(--red);">🗑️ Registrar Descarte</div>'
+    +'<div style="padding:10px;background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.3);border-radius:8px;margin-bottom:14px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;">'
+    +'<div><div style="font-size:9px;color:var(--muted);">LOTE</div><div style="font-weight:700;color:var(--text);">'+lote+'</div></div>'
+    +'<div><div style="font-size:9px;color:var(--muted);">FRUTA</div><div style="font-weight:700;color:var(--text);">'+fruta+'</div></div>'
+    +'<div><div style="font-size:9px;color:var(--muted);">SALDO</div><div style="font-weight:700;color:var(--red);">'+saldo+' '+tipoLabel+'</div></div>'
+    +'</div>'
+    +'<div style="margin-bottom:10px;">'
+    +'<label class="lbl">Quantidade a Descartar <span style="color:var(--red)">*</span></label>'
+    +'<div style="display:flex;align-items:center;gap:8px;">'
+    +'<input class="inp" id="desc-qtd" type="number" min="1" max="'+saldo+'" placeholder="0" style="max-width:120px;">'
+    +'<span style="font-size:11px;color:var(--muted);">'+tipoLabel+' (saldo: '+saldo+')</span>'
+    +'</div></div>'
+    +'<div style="margin-bottom:10px;">'
+    +'<label class="lbl">Motivo do Descarte <span style="color:var(--red)">*</span></label>'
+    +'<select class="inp" id="desc-motivo-sel" onchange="toggleMotivoOutro(this.value)">'
+    +'<option value="">Selecione o motivo...</option>'
+    +'<option value="Produto vencido">Produto vencido</option>'
+    +'<option value="Deterioração por qualidade">Deterioração por qualidade</option>'
+    +'<option value="Dano físico (amassado/machucado)">Dano físico (amassado/machucado)</option>'
+    +'<option value="Contaminação">Contaminação</option>'
+    +'<option value="Perda por temperatura">Perda por temperatura</option>'
+    +'<option value="Excesso de maturação">Excesso de maturação</option>'
+    +'<option value="Outro">Outro (especificar)</option>'
+    +'</select></div>'
+    +'<div id="desc-outro-div" style="display:none;margin-bottom:10px;">'
+    +'<label class="lbl">Especifique o motivo <span style="color:var(--red)">*</span></label>'
+    +'<input class="inp" id="desc-motivo-outro" placeholder="Descreva o motivo do descarte...">'
+    +'</div>'
+    +'<div style="margin-bottom:14px;">'
+    +'<label class="lbl">Data do Descarte</label>'
+    +'<input class="inp" id="desc-data" type="date" value="'+today()+'" style="max-width:160px;">'
+    +'</div>'
+    +'<div style="margin-bottom:14px;">'
+    +'<label class="lbl">Observações adicionais</label>'
+    +'<input class="inp" id="desc-obs" placeholder="Opcional...">'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button class="btn btn-r" onclick="confirmarDescarte()" style="background:rgba(239,68,68,.15);border-color:var(--red);color:var(--red);">🗑️ Confirmar Descarte</button>'
+    +'<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+    +'</div>'
+  );
+}
+
+function toggleMotivoOutro(val) {
+  var div = document.getElementById('desc-outro-div');
+  if(div) div.style.display = val === 'Outro' ? 'block' : 'none';
+}
+
+async function confirmarDescarte() {
+  var id = window._descarteEntradaId;
+  var e = DB.entradas.find(function(x){return x.id===id;});
+  if(!e) return toast('Erro: lote não encontrado','err');
+
+  var qtd = parseFloat((document.getElementById('desc-qtd')||{}).value)||0;
+  var motivoSel = (document.getElementById('desc-motivo-sel')||{}).value||'';
+  var motivoOutro = (document.getElementById('desc-motivo-outro')||{}).value||'';
+  var motivo = motivoSel === 'Outro' ? motivoOutro : motivoSel;
+  var data = (document.getElementById('desc-data')||{}).value || today();
+  var obs = (document.getElementById('desc-obs')||{}).value||'';
+
+  // Validações obrigatórias
+  if(qtd <= 0) return toast('Informe a quantidade a descartar','err');
+  var saldo = e.quantidade_atual!=null ? e.quantidade_atual : e.quantidade;
+  if(qtd > saldo) return toast('Quantidade maior que o saldo disponível ('+saldo+')','err');
+  if(!motivo.trim()) return toast('O motivo do descarte é obrigatório','err');
+
+  var tipoLabel = (e.tipo||'kg').toLowerCase()==='kg' ? 'kg' : 'cx';
+  var motivoCompleto = motivo + (obs ? ' — ' + obs : '');
+
+  // Salvar descarte no banco
+  var descarte = {
+    id: uid(), lote_id: id, lote: e.lote, fruta: e.fruta,
+    quantidade: qtd, motivo: motivoCompleto, data: data
+  };
+  var res = await POST('/api/descartes', descarte);
+  if(!res) return toast('Erro ao registrar descarte','err');
+  DB.descartes = DB.descartes || [];
+  DB.descartes.unshift(res);
+
+  // Abater do lote
+  var novoSaldo = Math.max(0, saldo - qtd);
+  e.quantidade_atual = novoSaldo;
+  e.status = novoSaldo === 0 ? 'esgotado' : 'disponivel';
+  await PATCH('/api/entradas/'+id+'/saldo', {
+    quantidade_atual: novoSaldo, status: e.status
+  });
+
+  closeModal();
+  toast('🗑️ Descarte registrado! '+qtd+' '+tipoLabel+' de '+e.fruta+' descartado(s). Motivo: '+motivo);
+  await loadAllData();
+  // Refresh current page
+  if(currentPage === 'estoque') renderEstoque();
+  else renderEntrada();
+}
+
+async function imprimirRelatorioDescartes() {
+  var desc = DB.descartes || [];
+  var totalQtd = desc.reduce(function(s,d){return s+(d.quantidade||0);},0);
+  var corpo = '<div class="pt">🗑️ Relatório de Descartes</div>'
+    +'<div style="display:flex;gap:10px;margin-bottom:14px;">'
+    +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Registros</div><div style="font-size:16px;font-weight:800;color:#ef4444;">'+desc.length+'</div></div>'
+    +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Total Descartado</div><div style="font-size:16px;font-weight:800;color:#ef4444;">'+totalQtd.toFixed(0)+'</div></div>'
+    +'</div>'
+    +'<table><thead><tr><th>Data</th><th>Lote</th><th>Fruta</th><th>Quantidade</th><th>Motivo</th></tr></thead><tbody>'
+    +desc.map(function(d){
+      return '<tr><td>'+fmtDate(d.data)+'</td><td style="font-weight:700;color:#f97316;">'+d.lote+'</td>'
+        +'<td>'+d.fruta+'</td><td style="color:#ef4444;font-weight:700;">'+d.quantidade+'</td>'
+        +'<td>'+d.motivo+'</td></tr>';
+    }).join('')
+    +'</tbody></table>';
+  abrirJanelaImpressao('Relatório de Descartes', corpo);
+}
+
+
+function renderDescartesList() {
+  var container = document.getElementById('descartes-list');
+  if(!container) return;
+  var desc = (DB.descartes||[]).slice().sort(function(a,b){return (b.data||'').localeCompare(a.data||'');});
+  if(desc.length===0) {
+    container.innerHTML = '<div class="empty">Nenhum descarte registrado</div>';
+    return;
+  }
+  var totalQtd = desc.reduce(function(s,d){return s+(d.quantidade||0);},0);
+  container.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Total: <strong style="color:var(--red)">'+desc.length+' registros | '+totalQtd.toFixed(0)+' unidades descartadas</strong></div>'
+    +'<div class="tbl-wrap"><table class="tbl"><thead><tr>'
+    +'<th>Data</th><th>Lote</th><th>Fruta</th><th>Qtd Descartada</th><th>Motivo</th>'
+    +'</tr></thead><tbody>'
+    +desc.map(function(d){
+      return '<tr>'
+        +'<td>'+fmtDate(d.data)+'</td>'
+        +'<td><span class="badge bo">'+d.lote+'</span></td>'
+        +'<td style="font-weight:600;color:var(--text)">'+d.fruta+'</td>'
+        +'<td style="color:var(--red);font-weight:700;">'+d.quantidade+'</td>'
+        +'<td>'+d.motivo+'</td>'
+        +'</tr>';
+    }).join('')
+    +'</tbody></table></div>';
+}
+
+</script>
 </body>
 </html>
