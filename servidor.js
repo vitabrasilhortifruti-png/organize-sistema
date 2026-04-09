@@ -439,7 +439,7 @@ app.delete('/api/pedidos/:id/completo', auth, async (req, res) => {
   res.json({ ok: true });
 });
 
-crudRoutes('romaneios',      ['numero','pedido_id','cliente_nome','fruta','motorista','placa','caixas','qualidade','rota','obs','data']);
+crudRoutes('romaneios',      ['numero','pedido_id','cliente_nome','fruta','motorista','placa','caixas','qualidade','rota','obs','status','data']);
 crudRoutes('vendas',         ['cliente_id','cliente','fruta','quantidade','quantidade_kg','valor','data','pedido_id','origem']);
 
 // ── CUSTOM DELETE VENDA: restaura estoque ──
