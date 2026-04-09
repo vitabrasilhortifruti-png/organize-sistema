@@ -196,7 +196,12 @@ app.post('/api/login', async (req, res) => {
                   (senha === '123456' && user.senha === knownGood);
   
   if (!senhaOk) {
-    return res.status(401).json({ erro: 'Senha incorreta', debug: hashAttempt.substring(0,10), stored: user.senha.substring(0,10) });
+    return res.status(401).json({ 
+      erro: 'Senha incorreta', 
+      hashCalculado: hashAttempt,
+      hashNoBanco: user.senha,
+      iguais: hashAttempt === user.senha
+    });
   }
   
   // If logged in with alt hash, update to current hash
@@ -585,9 +590,9 @@ app.get('/api/reset-admin-password', async (req, res) => {
   if (secret !== 'vitabrasil2026reset') {
     return res.status(403).json({ erro: 'Acesso negado' });
   }
-  // Use simple password to avoid encoding issues
+  // Hash gravado literalmente para evitar problemas de encoding
   const novaSenha = '123456';
-  const hash = hashSenha(novaSenha);
+  const hash = '376d4d82a0c638224fb21bc5f37b2a427b8c5f3c518955ee3d407e66024d284f'; // sha256('123456' + 'organize_salt_2026')
   
   // Get current user state
   const user = await db.get("SELECT id, email, acesso, ativo, LENGTH(senha) as senhaLen FROM usuarios WHERE email = 'nildomoraesagro@gmail.com'");
