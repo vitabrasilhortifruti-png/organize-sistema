@@ -1815,7 +1815,7 @@ function renderRomaneio() {
     +'<div class="section-title" style="margin:0;color:var(--green);">✅ Histórico de Entregas ('+rotasEntregues.length+')</div>'
     +'<div style="display:flex;gap:6px;">'
     +'<input class="inp" id="rom-f-data" type="date" style="max-width:140px;" oninput="filtrarHistRom()" placeholder="Filtrar por data">'
-    +'<button class="btn btn-s btn-sm" onclick="document.getElementById('rom-f-data').value='';filtrarHistRom()">✕</button>'
+    +'<button class="btn btn-s btn-sm" onclick="limparFiltroRom()">✕</button>'
     +'</div></div>'
     +'<div id="rom-hist-tbody">'
     +(rotasEntregues.length===0
@@ -1843,6 +1843,12 @@ function renderRomaneio() {
 function selecionarTodosPeds() {
   document.querySelectorAll('.rom-ped-cb').forEach(function(cb){cb.checked=true;});
   atualizarResumoRom();
+}
+
+function limparFiltroRom() {
+  var el = document.getElementById('rom-f-data');
+  if(el) el.value = '';
+  filtrarHistRom();
 }
 
 function filtrarHistRom() {
