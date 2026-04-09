@@ -3689,32 +3689,8 @@ function atualizarResumoRom() {
 }
 
 
-</script>
-  <script>
-    // ServiceWorker disabled);
-    }
-    // PWA install prompt
-    var deferredPrompt;
-    window.addEventListener('beforeinstallprompt', function(e) {
-      e.preventDefault();
-      deferredPrompt = e;
-      var btn = document.getElementById('pwa-install-btn');
-      if(btn) btn.style.display = 'flex';
-    });
-    window.addEventListener('appinstalled', function() {
-      var btn = document.getElementById('pwa-install-btn');
-      if(btn) btn.style.display = 'none';
-      deferredPrompt = null;
-    });
-    function instalarApp() {
-      if(deferredPrompt) {
-        deferredPrompt.prompt();
-        deferredPrompt.userChoice.then(function(choice) {
-          deferredPrompt = null;
-        });
-      }
-    }
-  
+
+
 // ── DESCARTE ─────────────────────────────────────────────
 function modalDescarte(entradaId, lote, fruta) {
   var e = DB.entradas.find(function(x){return x.id===entradaId;});
@@ -3766,6 +3742,30 @@ function modalDescarte(entradaId, lote, fruta) {
     +'</div>'
   );
 }
+
 </script>
+  <script>
+    // PWA install prompt
+    var deferredPrompt;
+    window.addEventListener('beforeinstallprompt', function(e) {
+      e.preventDefault();
+      deferredPrompt = e;
+      var btn = document.getElementById('pwa-install-btn');
+      if(btn) btn.style.display = 'flex';
+    });
+    window.addEventListener('appinstalled', function() {
+      var btn = document.getElementById('pwa-install-btn');
+      if(btn) btn.style.display = 'none';
+      deferredPrompt = null;
+    });
+    function instalarApp() {
+      if(deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(function(choice) {
+          deferredPrompt = null;
+        });
+      }
+    }
+  </script>
 </body>
 </html>
