@@ -134,11 +134,9 @@ label.lbl{font-size:11px;color:var(--sub);display:block;margin-bottom:5px;font-w
 .badge-gerente{background:rgba(99,102,241,.2);color:#818cf8;}
 .badge-operador{background:rgba(16,185,129,.2);color:var(--green);}
 .badge-visualizador{background:rgba(100,116,139,.2);color:var(--sub);}
-input[type="date"],input[type="time"]{color-scheme:dark;color:var(--text)!important;}
-input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1) brightness(2);cursor:pointer;opacity:1;}
-input[type="date"]::-webkit-datetime-edit-fields-wrapper{color:var(--text);}
-input[type="date"]::-webkit-datetime-edit{color:var(--text)!important;}
 
+input[type="date"],input[type="time"]{color-scheme:dark;}
+input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1) brightness(2);cursor:pointer;}
 </style>
 </head>
 <body>
@@ -1733,14 +1731,7 @@ async function delPedido(id) {
 // ROMANEIO
 // ═══════════════════════════════════════════════════════
 function renderRomaneio() {
-  // Pedidos atendidos que ainda não têm romaneio entregue
-  var pedIdsComRom = new Set();
-  DB.romaneios.filter(function(r){return r.status==='Entregue';}).forEach(function(r){
-    (r.pedido_id||'').split(',').forEach(function(id){if(id.trim())pedIdsComRom.add(id.trim());});
-  });
-  var pedsAtendidos = DB.pedidos.filter(function(p){
-    return p.status==='Atendido' && !pedIdsComRom.has(p.id);
-  });
+  var pedsAtendidos = DB.pedidos.filter(function(p){return p.status==='Atendido';});
   document.getElementById('content').innerHTML = '<div class="card" style="margin-bottom:16px;">'
     +'<div class="section-title">🚚 Gerar Mapa de Carga / Romaneio</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">'
@@ -1772,8 +1763,6 @@ function renderRomaneio() {
     +'<div class="section-title" style="margin-bottom:10px;">📋 Romaneios Gerados ('+DB.romaneios.length+')</div>'
     +'<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nº</th><th>Pedido/Cliente</th><th>Fruta</th><th>Motorista</th><th>Rota</th><th>Caixas</th><th>Data</th><th>Status</th><th>Ações</th></tr></thead><tbody>'
     +DB.romaneios.map(function(r){
-      var statusRom = r.status || 'Em Aberto';
-      var statusCor = statusRom==='Entregue'?'bg':statusRom==='Carregado'?'by':'bo';
       return '<tr>'
         +'<td><span class="badge bo">'+r.numero+'</span></td>'
         +'<td>'+r.cliente_nome+'</td>'
@@ -1782,13 +1771,7 @@ function renderRomaneio() {
         +'<td>'+(r.rota||r.obs||'-')+'</td>'
         +'<td>'+r.caixas+' cx</td>'
         +'<td>'+fmtDate(r.data)+'</td>'
-        +'<td><span class="badge '+statusCor+'">'+statusRom+'</span></td>'
         +'<td style="display:flex;gap:4px;">'
-        +'<select class="inp" style="padding:2px 4px;font-size:10px;max-width:110px;" onchange="atualizarStatusRomaneio(''+r.id+'',this.value)">'
-        +'<option value="Em Aberto"'+(statusRom==='Em Aberto'?' selected':'')+'>Em Aberto</option>'
-        +'<option value="Carregado"'+(statusRom==='Carregado'?' selected':'')+'>Carregado</option>'
-        +'<option value="Entregue"'+(statusRom==='Entregue'?' selected':'')+'>Entregue</option>'
-        +'</select>'
         +'<button class="btn btn-p btn-sm" data-rid="'+r.id+'" onclick="imprimirRomaneio(this.dataset.rid)">🖨️</button>'
         +'<button class="btn btn-r btn-sm" data-rid="'+r.id+'" onclick="delRomaneio(this.dataset.rid)"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button>'
         +'</td></tr>';
@@ -1948,16 +1931,7 @@ function imprimirRomaneio(id) {
   imprimirMapaCarga();
 }
 
-async 
-async function atualizarStatusRomaneio(id, status) {
-  await PUT('/api/romaneios/'+id, {status: status});
-  var r = DB.romaneios.find(function(x){return x.id===id;});
-  if(r) r.status = status;
-  toast('✅ Status atualizado: '+status);
-  // Reload list without full re-render
-}
-
-function delRomaneio(id) {
+async function delRomaneio(id) {
   if(!confirm('Excluir este romaneio?')) return;
   await DEL('/api/romaneios/'+id);
   DB.romaneios = DB.romaneios.filter(function(x){return x.id!==id;});
@@ -1985,16 +1959,7 @@ async function addRomaneio() {
   const res=await POST('/api/romaneios',payload);
   if(res){ DB.romaneios.unshift(res); toast('✓ Romaneio: '+num); renderRomaneio(); }
 }
-async 
-async function atualizarStatusRomaneio(id, status) {
-  await PUT('/api/romaneios/'+id, {status: status});
-  var r = DB.romaneios.find(function(x){return x.id===id;});
-  if(r) r.status = status;
-  toast('✅ Status atualizado: '+status);
-  // Reload list without full re-render
-}
-
-function delRomaneio(id) {
+async function delRomaneio(id) {
   if(!await DEL(`/api/romaneios/${id}`)) return;
   DB.romaneios=DB.romaneios.filter(r=>r.id!==id); renderRomaneio();
 }
@@ -3421,16 +3386,25 @@ async function imprimirRelatorioDescartes() {
 }
 
 
-function limparFiltrosDescarte() {
-  ['desc-f-ini','desc-f-fim','desc-f-lote'].forEach(function(id){
-    var el=document.getElementById(id); if(el) el.value='';
-  });
-  renderDescartesList();
-}
-
 function renderDescartesList() {
+  var isAdmin = CURRENT_USER && CURRENT_USER.acesso === 'admin';
+  // Build filter UI if missing
+  var card = document.getElementById('card-descartes');
+  if(card && !document.getElementById('desc-f-ini')) {
+    var filterDiv = document.createElement('div');
+    filterDiv.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;';
+    filterDiv.innerHTML = '<input class="inp" id="desc-f-ini" type="date" style="max-width:140px;" oninput="renderDescartesList()">'
+      +'<input class="inp" id="desc-f-fim" type="date" style="max-width:140px;" oninput="renderDescartesList()">'
+      +'<input class="inp" id="desc-f-lote" placeholder="🔍 Lote ou fruta..." style="max-width:150px;" oninput="renderDescartesList()">'
+      +'<button class="btn btn-s btn-sm" onclick="limparFiltrosDescarte()">✕</button>';
+    card.insertBefore(filterDiv, document.getElementById('descartes-list'));
+  }
+  // Apply filters
+  var fIni  = (document.getElementById('desc-f-ini') ||{}).value||'';
+  var fFim  = (document.getElementById('desc-f-fim') ||{}).value||'';
+  var fLote = ((document.getElementById('desc-f-lote')||{}).value||'').toLowerCase();
   // Auto-create container if doesn't exist
-  if(!document.getElementById('card-descartes')) {
+  if(!document.getElementById('descartes-list')) {
     var contentEl = document.getElementById('content');
     if(contentEl) {
       var card = document.createElement('div');
@@ -3440,42 +3414,27 @@ function renderDescartesList() {
       card.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
         +'<div class="section-title" style="margin:0;">🗑️ Histórico de Descartes</div>'
         +'<button class="btn btn-p btn-sm" onclick="imprimirRelatorioDescartes()">🖨️ Relatório</button>'
-        +'</div>'
-        +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">'
-        +'<input class="inp" id="desc-f-ini" type="date" style="max-width:140px;" oninput="renderDescartesList()" placeholder="De">'
-        +'<input class="inp" id="desc-f-fim" type="date" style="max-width:140px;" oninput="renderDescartesList()" placeholder="Até">'
-        +'<input class="inp" id="desc-f-lote" placeholder="🔍 Filtrar lote..." style="max-width:130px;" oninput="renderDescartesList()">'
-        +'<button class="btn btn-s btn-sm" onclick="limparFiltrosDescarte()">✕ Limpar</button>'
-        +'</div>'
-        +'<div id="descartes-list"></div>';
+        +'</div><div id="descartes-list"></div>';
       contentEl.appendChild(card);
     }
   }
   var container = document.getElementById('descartes-list');
   if(!container) return;
-
-  // Apply filters
-  var fIni  = (document.getElementById('desc-f-ini') ||{}).value||'';
-  var fFim  = (document.getElementById('desc-f-fim') ||{}).value||'';
-  var fLote = ((document.getElementById('desc-f-lote')||{}).value||'').toLowerCase();
-  var isAdmin = CURRENT_USER && CURRENT_USER.acesso === 'admin';
-
   var desc = (DB.descartes||[]).filter(function(d){
     if(fIni && d.data < fIni) return false;
     if(fFim && d.data > fFim) return false;
     if(fLote && !((d.lote||'').toLowerCase().includes(fLote)||(d.fruta||'').toLowerCase().includes(fLote))) return false;
     return true;
   }).sort(function(a,b){return (b.data||'').localeCompare(a.data||'');});
-
   if(desc.length===0) {
     container.innerHTML = '<div class="empty">Nenhum descarte encontrado</div>';
     return;
   }
   var totalQtd = desc.reduce(function(s,d){return s+(d.quantidade||0);},0);
-  container.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Exibindo: <strong style="color:var(--red)">'+desc.length+' registros | '+totalQtd.toFixed(0)+' unidades descartadas</strong></div>'
+  container.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Total: <strong style="color:var(--red)">'+desc.length+' | '+totalQtd.toFixed(0)+' unidades</strong></div>'
     +'<div class="tbl-wrap"><table class="tbl"><thead><tr>'
     +'<th>Data</th><th>Lote</th><th>Fruta</th><th>Qtd</th><th>Motivo</th>'
-    +(isAdmin?'<th>Ações</th>':'')
+    +(isAdmin?'<th></th>':'')
     +'</tr></thead><tbody>'
     +desc.map(function(d){
       return '<tr>'
@@ -3484,19 +3443,11 @@ function renderDescartesList() {
         +'<td style="font-weight:600;color:var(--text)">'+d.fruta+'</td>'
         +'<td style="color:var(--red);font-weight:700;">'+d.quantidade+'</td>'
         +'<td>'+d.motivo+'</td>'
-        +(isAdmin?'<td><button class="btn btn-r btn-sm" data-did="'+d.id+'" onclick="delDescarte(this.dataset.did)"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button></td>':'')
+        +(isAdmin?'<td><button class="btn btn-r btn-sm" data-did="'+d.id+'" onclick="delDescarte(this.dataset.did)"><i data-lucide="trash-2" style="width:10px;height:10px;"></i></button></td>':'')
         +'</tr>';
     }).join('')
     +'</tbody></table></div>';
   if(isAdmin) lucide.createIcons();
-}
-
-async function delDescarte(id) {
-  if(!confirm('Excluir este registro de descarte?')) return;
-  await DEL('/api/descartes/'+id);
-  DB.descartes = (DB.descartes||[]).filter(function(x){return x.id!==id;});
-  toast('Descarte excluído');
-  renderDescartesList();
 }
 
 
@@ -3711,6 +3662,48 @@ function atualizarLoteDescarte(sel) {
   document.getElementById('desc-tipo-label').textContent = tipo+' (saldo: '+s+')';
   var qtdEl = document.getElementById('desc-qtd');
   if(qtdEl) { qtdEl.max = s; qtdEl.placeholder = 'máx '+s; }
+}
+
+
+// ── BACKUP PAGE ──────────────────────────────────────────
+function renderBackupPage() {
+  document.getElementById('content').innerHTML = '<div class="card">'
+    +'<div class="section-title">💾 Backup do Sistema</div>'
+    +'<div style="font-size:12px;color:var(--sub);margin-bottom:14px;">Backups automáticos a cada ação. Dados seguros no volume Railway.</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:16px;">'
+    +'<button class="btn btn-p" onclick="fazerBackupManual()"><i data-lucide="save" style="width:13px;height:13px;"></i> Fazer Backup Agora</button>'
+    +'</div>'
+    +'<div style="padding:12px;background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.2);border-radius:8px;font-size:12px;color:var(--sub);">'
+    +'✅ <strong style="color:var(--text)">Dados salvos no servidor Railway</strong><br>'
+    +'🔄 Sincronização em tempo real entre usuários<br>'
+    +'💾 Backup automático a cada ação e a cada 10 minutos<br>'
+    +'🔒 Volume persistente — atualizações não apagam dados'
+    +'</div></div>';
+  lucide.createIcons();
+}
+
+// ── ROMANEIO STATUS ───────────────────────────────────────
+async function atualizarStatusRomaneio(id, status) {
+  await PUT('/api/romaneios/'+id, {status: status});
+  var r = DB.romaneios.find(function(x){return x.id===id;});
+  if(r) r.status = status;
+  toast('✅ Status: '+status);
+}
+
+// ── DESCARTE FILTERS ──────────────────────────────────────
+function limparFiltrosDescarte() {
+  ['desc-f-ini','desc-f-fim','desc-f-lote'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.value='';
+  });
+  renderDescartesList();
+}
+
+async function delDescarte(id) {
+  if(!confirm('Excluir este descarte?')) return;
+  await DEL('/api/descartes/'+id);
+  DB.descartes = (DB.descartes||[]).filter(function(x){return x.id!==id;});
+  toast('Descarte excluído');
+  renderDescartesList();
 }
 
 </script>
