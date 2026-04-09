@@ -742,7 +742,6 @@ function renderEmpresa() {
     <button class="btn btn-p" onclick="salvarEmpresa()">&#128190; Salvar</button>
   </div>`;
   lucide.createIcons();
-  renderEstoqueFiltrado();
   // Inject descarte section
   setTimeout(function(){
     var contentEl = document.getElementById('content');
@@ -1096,7 +1095,9 @@ function renderEntrada() {
     _c.appendChild(_d);
     renderDescartesList();
   })();
-}function updateEntTipo() {
+}
+
+function updateEntTipo() {
   const t=document.querySelector('input[name="en-tipo"]:checked').value;
   document.getElementById('en-peso-wrap').style.display=t==='kg'?'none':'block';
   calcEntKg();
@@ -2201,7 +2202,6 @@ function renderEstoque() {
     </tbody></table></div>
   </div>`;
   lucide.createIcons();
-  renderEstoqueFiltrado();
   // Descarte section
   (function(){
     var _c = document.getElementById('content');
