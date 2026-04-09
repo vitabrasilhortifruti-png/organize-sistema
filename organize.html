@@ -2305,14 +2305,9 @@ function renderRelatorios() {
       <div class="section-title"><i data-lucide="database" style="width:16px;height:16px;"></i> Backups</div>
       <div style="font-size:12px;color:var(--sub);margin-bottom:12px;">Backups automáticos a cada ação e a cada 10 minutos.</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-        <button class="btn btn-p" onclick="fazerBackupManual()"><i data-lucide="save" style="width:13px;height:13px;"></i> Backup Agora</button>
         <button class="btn btn-s" onclick="imprimirRelatorio()">🖨️ Imprimir Relatório</button>
-        <button class="btn btn-p btn-sm" onclick="modalHistoricoPrecos()">📈 Preços</button>
+        <button class="btn btn-p btn-sm" onclick="modalHistoricoPrecos()">📈 Preços por Fruta</button>
         <button class="btn btn-g btn-sm" onclick="modalComissao()">💼 Comissão</button>
-        <button class="btn btn-s" onclick="imprimirRelatorio()">🖨️ Imprimir Relatório</button>
-        <button class="btn btn-p btn-sm" onclick="modalHistoricoPrecos()">📈 Preços</button>
-        <button class="btn btn-g btn-sm" onclick="modalComissao()">💼 Comissão</button>
-        <button class="btn btn-g" onclick="enviarBackupEmail()"><i data-lucide="mail" style="width:13px;height:13px;"></i> Enviar por E-mail</button>
       </div>
       <div style="font-size:11px;color:var(--sub);margin-bottom:8px;">📧 Backup automático todo domingo às 8h para nildomoraesagro@gmail.com.br</div>
       <div id="backup-lista" style="margin-top:12px;"></div>
