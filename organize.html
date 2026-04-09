@@ -1732,55 +1732,154 @@ async function delPedido(id) {
 // ROMANEIO
 // ═══════════════════════════════════════════════════════
 function renderRomaneio() {
-  var pedsAtendidos = DB.pedidos.filter(function(p){return p.status==='Atendido';});
-  document.getElementById('content').innerHTML = '<div class="card" style="margin-bottom:16px;">'
-    +'<div class="section-title">🚚 Gerar Mapa de Carga / Romaneio</div>'
+  // Pedidos atendidos sem carga entregue
+  var pedIdsEntregues = new Set();
+  DB.romaneios.filter(function(r){return r.status==='Entregue';}).forEach(function(r){
+    (r.pedido_id||'').split(',').forEach(function(id){if(id.trim())pedIdsEntregues.add(id.trim());});
+  });
+  var pedsParaCarga = DB.pedidos.filter(function(p){
+    return p.status==='Atendido' && !pedIdsEntregues.has(p.id);
+  });
+
+  // Rotas abertas (Em Aberto ou Carregado)
+  var rotasAbertas = DB.romaneios.filter(function(r){
+    return !r.status || r.status==='Em Aberto' || r.status==='Carregado';
+  });
+  // Histórico entregues
+  var rotasEntregues = DB.romaneios.filter(function(r){return r.status==='Entregue';});
+
+  document.getElementById('content').innerHTML =
+    // ── SEÇÃO: MONTAR CARGA ──────────────────────────────
+    '<div class="card" style="margin-bottom:12px;">'
+    +'<div class="section-title">🚚 Montar Mapa de Carga</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">'
     +'<div><label class="lbl">Motorista</label><input class="inp" id="rom-motor" placeholder="Nome do motorista"></div>'
     +'<div><label class="lbl">Placa</label><input class="inp" id="rom-placa" placeholder="Placa do veículo"></div>'
-    +'<div><label class="lbl">Rota</label><input class="inp" id="rom-rota" placeholder="Ex: Rota 1, Centro, Norte..."></div>'
+    +'<div><label class="lbl">Rota / Região</label><input class="inp" id="rom-rota" placeholder="Ex: Rota 1, Centro..."></div>'
     +'</div>'
-    +'<div style="margin-bottom:10px;">'
-    +'<label class="lbl">Selecione os Pedidos Atendidos para esta carga:</label>'
-    +'<div style="max-height:220px;overflow-y:auto;margin-top:6px;border:1px solid var(--border);border-radius:8px;padding:6px;">'
-    +(pedsAtendidos.length===0
-      ? '<div class="empty">Nenhum pedido atendido disponível</div>'
-      : pedsAtendidos.map(function(p){
-          var kg = p.quantidade_kg||0;
+    +'<div style="margin-bottom:8px;"><label class="lbl">📦 Selecione os Pedidos para esta Carga:</label></div>'
+    +(pedsParaCarga.length===0
+      ? '<div class="empty" style="margin-bottom:10px;">✅ Todos os pedidos atendidos já foram entregues!</div>'
+      : '<div style="max-height:240px;overflow-y:auto;margin-bottom:10px;border:1px solid var(--border);border-radius:8px;padding:6px;">'
+        +pedsParaCarga.map(function(p){
           var pal = Math.ceil(p.quantidade/30);
           return '<label style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--border);cursor:pointer;">'
-            +'<input type="checkbox" class="rom-ped-cb" value="'+p.id+'" style="accent-color:var(--accent);width:15px;height:15px;" onchange="atualizarResumoRomaneio()">'
+            +'<input type="checkbox" class="rom-ped-cb" value="'+p.id+'" style="accent-color:var(--accent);width:15px;height:15px;" onchange="atualizarResumoRom()">'
             +'<div style="flex:1;">'
-            +'<div style="font-size:12px;font-weight:700;color:var(--text)">'+p.cliente_nome+'</div>'
-            +'<div style="font-size:10px;color:var(--muted)">'+p.fruta+' · '+p.quantidade+' cx · '+kg.toFixed(0)+' kg · '+pal+' palete(s) · Entrega: '+fmtDate(p.data_entrega)+'</div>'
+            +'<strong style="font-size:12px;color:var(--text)">'+p.cliente_nome+'</strong>'
+            +'<span style="font-size:10px;color:var(--muted);margin-left:8px;">'+p.fruta+' · '+p.quantidade+' cx · '+(p.quantidade_kg||0).toFixed(0)+' kg · '+pal+' pal · Entrega: '+fmtDate(p.data_entrega)+'</span>'
             +'</div></label>';
-        }).join(''))
+        }).join('')
+        +'</div>'
+        +'<div id="rom-resumo" style="padding:10px;background:#060a12;border-radius:8px;margin-bottom:10px;font-size:12px;color:var(--sub);">Selecione pedidos acima</div>'
+        +'<div style="display:flex;gap:8px;">'
+        +'<button class="btn btn-p" onclick="gerarRomaneioMulti()">🚚 Gerar Mapa de Carga</button>'
+        +'<button class="btn btn-s btn-sm" onclick="selecionarTodosPeds()">Selecionar Todos</button>'
+        +'</div>')
+    +'</div>'
+
+    // ── SEÇÃO: CARGAS EM ABERTO ──────────────────────────
+    +(rotasAbertas.length>0
+      ? '<div class="card" style="margin-bottom:12px;">'
+        +'<div class="section-title" style="color:var(--yellow);">⏳ Cargas em Aberto / Carregadas ('+rotasAbertas.length+')</div>'
+        +'<div class="tbl-wrap"><table class="tbl"><thead><tr>'
+        +'<th>Nº</th><th>Cliente(s)</th><th>Motorista</th><th>Rota</th><th>Caixas</th><th>Data</th><th>Status</th><th>Ações</th>'
+        +'</tr></thead><tbody>'
+        +rotasAbertas.map(function(r){
+          var st=r.status||'Em Aberto';
+          var sc=st==='Carregado'?'by':'bo';
+          return '<tr>'
+            +'<td><span class="badge bo">'+r.numero+'</span></td>'
+            +'<td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;">'+r.cliente_nome+'</td>'
+            +'<td>'+(r.motorista||'-')+'</td>'
+            +'<td>'+(r.rota||'-')+'</td>'
+            +'<td>'+r.caixas+' cx</td>'
+            +'<td>'+fmtDate(r.data)+'</td>'
+            +'<td><select class="inp" style="padding:2px 4px;font-size:10px;max-width:110px;" data-rid="'+r.id+'" onchange="atualizarStatusRomaneio(this.dataset.rid,this.value);renderRomaneio()">'
+            +'<option'+(st==='Em Aberto'?' selected':'')+'>Em Aberto</option>'
+            +'<option'+(st==='Carregado'?' selected':'')+'>Carregado</option>'
+            +'<option'+(st==='Entregue'?' selected':'')+'>Entregue</option>'
+            +'</select></td>'
+            +'<td style="display:flex;gap:4px;">'
+            +'<button class="btn btn-p btn-sm" data-rid="'+r.id+'" onclick="imprimirRomaneio(this.dataset.rid)" title="Imprimir">🖨️</button>'
+            +'<button class="btn btn-g btn-sm" data-rid="'+r.id+'" onclick="reabrirCarga(this.dataset.rid)" title="Readicionar pedidos">↩️</button>'
+            +'<button class="btn btn-r btn-sm" data-rid="'+r.id+'" onclick="delRomaneio(this.dataset.rid)" title="Excluir"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button>'
+            +'</td></tr>';
+        }).join('')
+        +'</tbody></table></div></div>'
+      : '')
+
+    // ── SEÇÃO: HISTÓRICO ENTREGUES ───────────────────────
+    +'<div class="card">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
+    +'<div class="section-title" style="margin:0;color:var(--green);">✅ Histórico de Entregas ('+rotasEntregues.length+')</div>'
+    +'<div style="display:flex;gap:6px;">'
+    +'<input class="inp" id="rom-f-data" type="date" style="max-width:140px;" oninput="filtrarHistRom()" placeholder="Filtrar por data">'
+    +'<button class="btn btn-s btn-sm" onclick="document.getElementById('rom-f-data').value='';filtrarHistRom()">✕</button>'
     +'</div></div>'
-    +'<div id="rom-resumo" style="margin-bottom:12px;padding:10px;background:#060a12;border-radius:8px;font-size:12px;color:var(--sub);">Selecione pedidos acima</div>'
-    +'<div style="display:flex;gap:8px;">'
-    +'<button class="btn btn-p" onclick="gerarRomaneioMulti()">🚚 Gerar Mapa de Carga</button>'
-    +'<button class="btn btn-s btn-sm" onclick="imprimirMapaCarga()">🖨️ Imprimir sem salvar</button>'
-    +'</div></div>'
-    +'<div class="section-title" style="margin-bottom:10px;">📋 Romaneios Gerados ('+DB.romaneios.length+')</div>'
-    +'<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nº</th><th>Pedido/Cliente</th><th>Fruta</th><th>Motorista</th><th>Rota</th><th>Caixas</th><th>Data</th><th>Status</th><th>Ações</th></tr></thead><tbody>'
-    +DB.romaneios.map(function(r){
-      return '<tr>'
-        +'<td><span class="badge bo">'+r.numero+'</span></td>'
-        +'<td>'+r.cliente_nome+'</td>'
-        +'<td>'+r.fruta+'</td>'
-        +'<td>'+(r.motorista||'-')+'</td>'
-        +'<td>'+(r.rota||r.obs||'-')+'</td>'
-        +'<td>'+r.caixas+' cx</td>'
-        +'<td>'+fmtDate(r.data)+'</td>'
-        +'<td style="display:flex;gap:4px;">'
-        +'<button class="btn btn-p btn-sm" data-rid="'+r.id+'" onclick="imprimirRomaneio(this.dataset.rid)">🖨️</button>'
-        +'<button class="btn btn-r btn-sm" data-rid="'+r.id+'" onclick="delRomaneio(this.dataset.rid)"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button>'
-        +'</td></tr>';
-    }).join('')
-    +'</tbody></table></div>';
+    +'<div id="rom-hist-tbody">'
+    +(rotasEntregues.length===0
+      ? '<div class="empty">Nenhuma entrega concluída</div>'
+      : '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nº</th><th>Cliente(s)</th><th>Motorista</th><th>Rota</th><th>Caixas</th><th>Data</th><th>Ações</th></tr></thead><tbody id="rom-hist-rows">'
+        +rotasEntregues.map(function(r){
+          return '<tr data-data="'+r.data+'">'
+            +'<td><span class="badge bg">'+r.numero+'</span></td>'
+            +'<td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;">'+r.cliente_nome+'</td>'
+            +'<td>'+(r.motorista||'-')+'</td>'
+            +'<td>'+(r.rota||'-')+'</td>'
+            +'<td>'+r.caixas+' cx</td>'
+            +'<td>'+fmtDate(r.data)+'</td>'
+            +'<td style="display:flex;gap:4px;">'
+            +'<button class="btn btn-p btn-sm" data-rid="'+r.id+'" onclick="imprimirRomaneio(this.dataset.rid)">🖨️</button>'
+            +'<button class="btn btn-s btn-sm" data-rid="'+r.id+'" onclick="reabrirCarga(this.dataset.rid)" title="Reabrir carga">↩️ Reabrir</button>'
+            +'</td></tr>';
+        }).join('')
+        +'</tbody></table></div>')
+    +'</div></div>';
+
   lucide.createIcons();
-  atualizarResumoRomaneio();
 }
+
+function selecionarTodosPeds() {
+  document.querySelectorAll('.rom-ped-cb').forEach(function(cb){cb.checked=true;});
+  atualizarResumoRom();
+}
+
+function filtrarHistRom() {
+  var data = (document.getElementById('rom-f-data')||{}).value||'';
+  document.querySelectorAll('#rom-hist-rows tr').forEach(function(tr){
+    tr.style.display = (!data || tr.dataset.data===data) ? '' : 'none';
+  });
+}
+
+function atualizarResumoRom() {
+  var cbs = document.querySelectorAll('.rom-ped-cb:checked');
+  var totalCx=0,totalKg=0,totalPal=0;
+  cbs.forEach(function(cb){
+    var p=DB.pedidos.find(function(x){return x.id===cb.value;});
+    if(p){totalCx+=p.quantidade;totalKg+=(p.quantidade_kg||0);totalPal+=Math.ceil(p.quantidade/30);}
+  });
+  var el=document.getElementById('rom-resumo');
+  if(!el)return;
+  if(cbs.length===0){el.innerHTML='Selecione pedidos acima';return;}
+  el.innerHTML='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center;">'
+    +'<div><div style="font-size:9px;color:var(--muted)">PEDIDOS</div><div style="font-size:16px;font-weight:800;color:var(--text)">'+cbs.length+'</div></div>'
+    +'<div><div style="font-size:9px;color:var(--muted)">CAIXAS</div><div style="font-size:16px;font-weight:800;color:var(--accent)">'+totalCx+'</div></div>'
+    +'<div><div style="font-size:9px;color:var(--muted)">KG</div><div style="font-size:16px;font-weight:800;color:var(--green)">'+totalKg.toFixed(0)+' kg</div></div>'
+    +'<div><div style="font-size:9px;color:var(--muted)">PALETES</div><div style="font-size:16px;font-weight:800;color:var(--yellow)">'+totalPal+' pal</div></div>'
+    +'</div>';
+}
+
+async function reabrirCarga(id) {
+  var r = DB.romaneios.find(function(x){return x.id===id;});
+  if(!r) return;
+  if(!confirm('Reabrir a carga '+r.numero+'? Os pedidos voltarão para seleção de carga.')) return;
+  await PUT('/api/romaneios/'+id, {status: 'Em Aberto'});
+  r.status = 'Em Aberto';
+  toast('✅ Carga '+r.numero+' reaberta!');
+  renderRomaneio();
+}
+
 
 function atualizarResumoRomaneio() {
   var cbs = document.querySelectorAll('.rom-ped-cb:checked');
@@ -1816,13 +1915,17 @@ async function gerarRomaneioMulti() {
   var rom = {id:uid(),numero:numRom,pedido_id:pedsSel.map(function(p){return p.id;}).join(','),
     cliente_nome:pedsSel.map(function(p){return p.cliente_nome;}).join(' | '),
     fruta:pedsSel.map(function(p){return p.fruta;}).join(', '),
-    motorista:motor,placa:placa,caixas:totalCx,rota:rota,
+    motorista:motor,placa:placa,caixas:totalCx,rota:rota,status:'Em Aberto',
     obs:'Rota: '+rota,data:today()};
-  var res = await POST('/api/romaneios',rom);
-  if(res) { DB.romaneios.unshift(res); toast('✅ Romaneio '+numRom+' criado — Rota: '+rota); }
-  // Print automatically
-  window._romPrint = {rom:res||rom, peds:pedsSel, rota:rota};
+  var res = await POST('/api/romaneios', rom);
+  if(res) {
+    DB.romaneios.unshift(res);
+    toast('✅ Mapa de carga '+numRom+' gerado! Rota: '+rota);
+  }
+  // Print and refresh
+  window._romPrint = {rom: res||rom, peds: pedsSel, rota: rota};
   imprimirMapaCarga();
+  await loadAllData();
   renderRomaneio();
 }
 
@@ -3663,19 +3766,35 @@ function atualizarLoteDescarte(sel) {
 
 // ── BACKUP PAGE ──────────────────────────────────────────
 function renderBackupPage() {
-  document.getElementById('content').innerHTML = '<div class="card">'
+  document.getElementById('content').innerHTML = '<div class="card" style="margin-bottom:12px;">'
     +'<div class="section-title">💾 Backup do Sistema</div>'
-    +'<div style="font-size:12px;color:var(--sub);margin-bottom:14px;">Backups automáticos a cada ação. Dados seguros no volume Railway.</div>'
-    +'<div style="display:flex;gap:8px;margin-bottom:16px;">'
-    +'<button class="btn btn-p" onclick="fazerBackupManual()"><i data-lucide="save" style="width:13px;height:13px;"></i> Fazer Backup Agora</button>'
+    +'<div style="font-size:12px;color:var(--sub);margin-bottom:14px;">Backups automáticos a cada ação e a cada 10 minutos. Dados seguros no volume Railway.</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">'
+    +'<button class="btn btn-p" onclick="fazerBackupManual()"><i data-lucide="save" style="width:13px;height:13px;"></i> Backup Agora</button>'
+    +'<button class="btn btn-g" onclick="enviarBackupEmail()"><i data-lucide="mail" style="width:13px;height:13px;"></i> Enviar por E-mail</button>'
     +'</div>'
-    +'<div style="padding:12px;background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.2);border-radius:8px;font-size:12px;color:var(--sub);">'
+    +'<div style="padding:12px;background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.2);border-radius:8px;font-size:12px;color:var(--sub);margin-bottom:14px;">'
     +'✅ <strong style="color:var(--text)">Dados salvos no servidor Railway</strong><br>'
     +'🔄 Sincronização em tempo real entre usuários<br>'
     +'💾 Backup automático a cada ação e a cada 10 minutos<br>'
     +'🔒 Volume persistente — atualizações não apagam dados'
-    +'</div></div>';
+    +'</div>'
+    +'<div class="section-title" style="margin-bottom:8px;">📋 Últimos Backups</div>'
+    +'<div id="backup-list-page">Carregando...</div>'
+    +'</div>';
   lucide.createIcons();
+  // Load backup list
+  GET('/api/backups').then(function(data){
+    var el = document.getElementById('backup-list-page');
+    if(!el) return;
+    if(!data||!data.length){el.innerHTML='<div class="empty">Nenhum backup encontrado</div>';return;}
+    el.innerHTML = '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Arquivo</th><th>Data</th><th>Tamanho</th></tr></thead><tbody>'
+      +data.slice(0,20).map(function(b){return '<tr><td style="font-family:monospace;font-size:10px;color:var(--accent)">'+b.nome+'</td><td>'+b.data+'</td><td>'+b.tamanho+'</td></tr>';}).join('')
+      +'</tbody></table></div>';
+  }).catch(function(){
+    var el = document.getElementById('backup-list-page');
+    if(el) el.innerHTML='<div class="empty">Lista não disponível</div>';
+  });
 }
 
 // ── ROMANEIO STATUS ───────────────────────────────────────
@@ -3683,7 +3802,12 @@ async function atualizarStatusRomaneio(id, status) {
   await PUT('/api/romaneios/'+id, {status: status});
   var r = DB.romaneios.find(function(x){return x.id===id;});
   if(r) r.status = status;
-  toast('✅ Status: '+status);
+  toast('✅ Carga '+status+'!');
+  // If set to Entregue, re-render to move to history
+  if(status === 'Entregue') {
+    await loadAllData();
+    renderRomaneio();
+  }
 }
 
 // ── DESCARTE FILTERS ──────────────────────────────────────
