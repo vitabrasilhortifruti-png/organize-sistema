@@ -557,19 +557,51 @@ app.post('/api/backup/email', authAdmin, async (req, res) => {
 });
 
 
-// ── EMERGENCY PASSWORD RESET (apenas se não conseguir logar) ──
+// ── EMERGENCY PASSWORD RESET ──────────────────────────────
 app.get('/api/reset-admin-password', async (req, res) => {
   const secret = req.query.secret;
   if (secret !== 'vitabrasil2026reset') {
     return res.status(403).json({ erro: 'Acesso negado' });
   }
-  const novaSenha = 'Organize@2026';
+  // Use simple password to avoid encoding issues
+  const novaSenha = '123456';
   const hash = hashSenha(novaSenha);
-  await db.run(
-    "UPDATE usuarios SET senha = ? WHERE email = 'nildomoraesagro@gmail.com'",
+  
+  // Get current user state
+  const user = await db.get("SELECT id, email, acesso, ativo, LENGTH(senha) as senhaLen FROM usuarios WHERE email = 'nildomoraesagro@gmail.com'");
+  
+  // Reset password
+  const result = await db.run(
+    "UPDATE usuarios SET senha = ?, ativo = 1 WHERE email = 'nildomoraesagro@gmail.com'",
     hash
   );
-  res.json({ ok: true, msg: 'Senha resetada para: Organize@2026', email: 'nildomoraesagro@gmail.com' });
+  
+  // Also ensure user exists
+  if (!user) {
+    const id = uid();
+    await db.run(
+      "INSERT INTO usuarios (id, nome, email, senha, acesso, ativo) VALUES (?, 'Admin', 'nildomoraesagro@gmail.com', ?, 'admin', 1)",
+      id, hash
+    );
+  }
+  
+  res.json({ 
+    ok: true, 
+    novaSenha: '123456',
+    email: 'nildomoraesagro@gmail.com',
+    usuarioAntes: user,
+    rowsAffected: result.changes,
+    hashEsperado: hash.substring(0, 20) + '...'
+  });
+});
+
+// ── CHECK USER STATUS ──────────────────────────────────────
+app.get('/api/check-user', async (req, res) => {
+  const secret = req.query.secret;
+  if (secret !== 'vitabrasil2026reset') return res.status(403).json({ erro: 'Negado' });
+  const users = await db.all("SELECT id, nome, email, acesso, ativo, LENGTH(senha) as senhaLen, criado FROM usuarios");
+  const testHash = hashSenha('123456');
+  res.json({ users, testHash: testHash.substring(0,20)+'...' });
 });
 
 openDB().then(() => {
