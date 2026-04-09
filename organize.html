@@ -211,7 +211,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1) brightnes
       <button class="nb" onclick="goTo('cadastros')">👥 Cadastros</button>
       <button class="nb" onclick="goTo('entrada')">⬇️ Entrada</button>
       <button class="nb" onclick="goTo('pedidos')">📋 Pedidos</button>
-      <button class="nb" onclick="goTo('romaneio')">🚚 Romaneio</button>
+      <button class="nb" onclick="goTo('romaneio')">🚚 Romaneio de Carga</button>
       <button class="nb" onclick="goTo('vendas')">💰 Vendas</button>
       <button class="nb" onclick="goTo('caixas')">📫 Caixas</button>
       <button class="nb" onclick="goTo('estoque')">📈 Estoque</button>
@@ -1770,17 +1770,19 @@ async function delPedido(id) {
 // ROMANEIO
 // ═══════════════════════════════════════════════════════
 function renderRomaneio() {
-  // Pedidos que já estão em alguma carga (qualquer status de romaneio)
+  // Pedidos que já estão em QUALQUER romaneio (exceto os entregues que foram reabertos)
   var pedIdsEmCarga = new Set();
-  DB.romaneios.forEach(function(r){
-    (r.pedido_id||'').split(',').forEach(function(id){
-      if(id.trim()) pedIdsEmCarga.add(id.trim());
+  (DB.romaneios || []).forEach(function(r){
+    var ids = (r.pedido_id||'').split(',');
+    ids.forEach(function(id){
+      var trimId = id.trim();
+      if(trimId) pedIdsEmCarga.add(trimId);
     });
   });
 
-  // Pedidos atendidos que ainda não estão em nenhuma carga
-  var pedsLivres = DB.pedidos.filter(function(p){
-    return p.status==='Atendido' && !pedIdsEmCarga.has(p.id);
+  // Pedidos atendidos que NÃO estão em nenhum romaneio ativo
+  var pedsLivres = (DB.pedidos || []).filter(function(p){
+    return p.status === 'Atendido' && !pedIdsEmCarga.has(p.id);
   });
 
   // Cargas em andamento (Em Aberto ou Carregado)
@@ -1797,7 +1799,7 @@ function renderRomaneio() {
 
   // ── SEÇÃO 1: MONTAR CARGA ──────────────────────────────
   html += '<div class="card" style="margin-bottom:12px;">'
-    +'<div class="section-title">🚚 Montar Mapa de Carga</div>'
+    +'<div class="section-title">🚚 Romaneio de Carga — Montar Mapa</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">'
     +'<div><label class="lbl">Motorista</label><input class="inp" id="rom-motor" placeholder="Nome do motorista"></div>'
     +'<div><label class="lbl">Placa</label><input class="inp" id="rom-placa" placeholder="Placa do veículo"></div>'
