@@ -105,6 +105,10 @@ async function openDB() {
     );
     INSERT OR IGNORE INTO empresa (id, nome) VALUES (1, 'Organize');
   `);
+  // Migrations: add columns if not exist
+  try { await db.run("ALTER TABLE romaneios ADD COLUMN status TEXT DEFAULT 'Em Aberto'"); } catch(e) {}
+  try { await db.run("ALTER TABLE romaneios ADD COLUMN rota TEXT DEFAULT ''"); } catch(e) {}
+  
   console.log('Banco de dados pronto!');
 }
 
