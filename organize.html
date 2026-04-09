@@ -676,6 +676,33 @@ function renderDashboard() {
     +'<div class="stat"><div class="stat-icon">👥 Clientes</div><div class="stat-n">'+DB.clientes.length+'</div><div class="stat-l">cadastrados</div></div>'
     +'<div class="stat"><div class="stat-icon">🚛 Fornecedores</div><div class="stat-n">'+DB.fornecedores.length+'</div><div class="stat-l">cadastrados</div></div>'
     +'</div>'
+
+    // Meta de vendas
+    +(function(){
+      var meta = getMetaVendas();
+      if(meta <= 0) {
+        return '<div style="margin-bottom:14px;padding:10px 14px;background:#0d1320;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">'
+          +'<span style="font-size:11px;color:var(--muted);">🎯 Meta de vendas não definida</span>'
+          +'<button class="btn btn-s btn-sm" onclick="modalMetaVendas()">Definir Meta</button>'
+          +'</div>';
+      }
+      var pct = Math.min(100, Math.round((totalVendas/meta)*100));
+      var cor = pct>=100?'var(--green)':pct>=70?'var(--accent)':'var(--yellow)';
+      return '<div style="margin-bottom:14px;padding:12px 14px;background:#0d1320;border-radius:8px;">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+        +'<div style="font-size:12px;font-weight:700;color:var(--text)">🎯 Meta Mensal de Vendas</div>'
+        +'<div style="display:flex;gap:8px;align-items:center;">'
+        +'<span style="font-size:11px;color:var(--muted);">'+fmtMoney(totalVendas)+' / '+fmtMoney(meta)+'</span>'
+        +'<span style="font-size:13px;font-weight:800;color:'+cor+';">'+pct+'%</span>'
+        +'<button class="btn btn-s btn-sm" onclick="modalMetaVendas()" style="font-size:9px;padding:2px 6px;">✏️</button>'
+        +'</div></div>'
+        +'<div class="pbar" style="height:12px;">'
+        +'<div class="pbar-fill" style="width:'+pct+'%;background:'+cor+';transition:width .5s;"></div>'
+        +'</div>'
+        +(pct>=100?'<div style="font-size:10px;color:var(--green);margin-top:4px;font-weight:700;">🎉 Meta atingida! Faturou R$ '+(totalVendas-meta).toFixed(2)+' acima da meta!</div>':'')
+        +'</div>';
+    })()
+
     +pendHTML
     +'<div class="grid2" style="margin-bottom:16px;">'
     +'<div class="card"><div class="section-title">📈 Vendas — Últimos 7 dias</div>'
@@ -2282,7 +2309,11 @@ function renderRelatorios() {
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
         <button class="btn btn-p" onclick="fazerBackupManual()"><i data-lucide="save" style="width:13px;height:13px;"></i> Backup Agora</button>
         <button class="btn btn-s" onclick="imprimirRelatorio()">🖨️ Imprimir Relatório</button>
+        <button class="btn btn-p btn-sm" onclick="modalHistoricoPrecos()">📈 Preços por Fruta</button>
+        <button class="btn btn-g btn-sm" onclick="modalComissao()">💼 Comissão</button>
         <button class="btn btn-s" onclick="imprimirRelatorio()">🖨️ Imprimir Relatório</button>
+        <button class="btn btn-p btn-sm" onclick="modalHistoricoPrecos()">📈 Preços por Fruta</button>
+        <button class="btn btn-g btn-sm" onclick="modalComissao()">💼 Comissão</button>
         <button class="btn btn-g" onclick="enviarBackupEmail()"><i data-lucide="mail" style="width:13px;height:13px;"></i> Enviar por E-mail</button>
       </div>
       <div style="font-size:11px;color:var(--sub);margin-bottom:8px;">📧 Backup automático todo domingo às 8h para nildomoraesagro@gmail.com.br</div>
@@ -3381,6 +3412,246 @@ function renderDescartesList() {
         +'</tr>';
     }).join('')
     +'</tbody></table></div>';
+}
+
+
+// ═══════════════════════════════════════════════════════════
+// META DE VENDAS
+// ═══════════════════════════════════════════════════════════
+function getMetaVendas() {
+  return parseFloat(localStorage.getItem('meta_vendas_mensal') || '0');
+}
+function setMetaVendas(val) {
+  localStorage.setItem('meta_vendas_mensal', val);
+}
+function modalMetaVendas() {
+  var atual = getMetaVendas();
+  modal('<div class="section-title">🎯 Meta de Vendas</div>'
+    +'<div style="margin-bottom:12px;"><label class="lbl">Meta Mensal (R$)</label>'
+    +'<input class="inp" id="meta-val" type="number" step="100" value="'+(atual||'')+'" placeholder="Ex: 50000"></div>'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button class="btn btn-p" onclick="salvarMeta()">💾 Salvar</button>'
+    +'<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+    +'</div>');
+}
+function salvarMeta() {
+  var val = parseFloat(document.getElementById('meta-val').value)||0;
+  setMetaVendas(val);
+  closeModal();
+  toast('✅ Meta definida: R$ '+val.toFixed(2));
+  renderDashboard();
+}
+
+// ═══════════════════════════════════════════════════════════
+// HISTÓRICO DE PREÇOS POR FRUTA
+// ═══════════════════════════════════════════════════════════
+function modalHistoricoPrecos() {
+  // Aggregate price history from pedidos
+  var precos = {};
+  DB.pedidos.forEach(function(p) {
+    if(!p.fruta || !(p.valor > 0)) return;
+    if(!precos[p.fruta]) precos[p.fruta] = [];
+    precos[p.fruta].push({data: p.data_pedido, valor: p.valor, cliente: p.cliente_nome});
+  });
+  var frutas = Object.keys(precos).sort();
+  if(frutas.length === 0) {
+    return toast('Nenhum pedido com valor registrado','warn');
+  }
+  var tabelas = frutas.map(function(fruta) {
+    var hist = precos[fruta].sort(function(a,b){return b.data.localeCompare(a.data);});
+    var precoMin = Math.min.apply(null, hist.map(function(h){return h.valor;}));
+    var precoMax = Math.max.apply(null, hist.map(function(h){return h.valor;}));
+    var precoMed = hist.reduce(function(s,h){return s+h.valor;},0)/hist.length;
+    return '<div style="margin-bottom:14px;">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+      +'<strong style="color:var(--accent);font-size:13px;">🍊 '+fruta+'</strong>'
+      +'<div style="display:flex;gap:12px;font-size:10px;">'
+      +'<span>Mín: <strong style="color:var(--green)">R$ '+precoMin.toFixed(2)+'</strong></span>'
+      +'<span>Méd: <strong style="color:var(--accent)">R$ '+precoMed.toFixed(2)+'</strong></span>'
+      +'<span>Máx: <strong style="color:var(--red)">R$ '+precoMax.toFixed(2)+'</strong></span>'
+      +'</div></div>'
+      +'<div class="tbl-wrap" style="max-height:150px;overflow-y:auto;">'
+      +'<table class="tbl"><thead><tr><th>Data</th><th>Cliente</th><th>Valor/cx</th></tr></thead><tbody>'
+      +hist.slice(0,10).map(function(h){
+        return '<tr><td>'+fmtDate(h.data)+'</td><td>'+h.cliente+'</td>'
+          +'<td style="font-weight:700;color:var(--accent);">R$ '+h.valor.toFixed(2)+'</td></tr>';
+      }).join('')
+      +'</tbody></table></div></div>';
+  }).join('');
+  modal('<div class="section-title">📈 Histórico de Preços por Fruta</div>'
+    +'<div style="max-height:500px;overflow-y:auto;">'+tabelas+'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:10px;">'
+    +'<button class="btn btn-p btn-sm" onclick="imprimirHistoricoPrecos()">🖨️ Imprimir</button>'
+    +'<button class="btn btn-s" onclick="closeModal()">Fechar</button>'
+    +'</div>');
+}
+
+function imprimirHistoricoPrecos() {
+  var precos = {};
+  DB.pedidos.forEach(function(p) {
+    if(!p.fruta || !(p.valor > 0)) return;
+    if(!precos[p.fruta]) precos[p.fruta] = [];
+    precos[p.fruta].push({data: p.data_pedido, valor: p.valor, cliente: p.cliente_nome});
+  });
+  var frutas = Object.keys(precos).sort();
+  var corpo = '<div class="pt">📈 Histórico de Preços por Fruta</div>'
+    +frutas.map(function(fruta) {
+      var hist = precos[fruta].sort(function(a,b){return b.data.localeCompare(a.data);});
+      var min = Math.min.apply(null,hist.map(function(h){return h.valor;}));
+      var max = Math.max.apply(null,hist.map(function(h){return h.valor;}));
+      var med = hist.reduce(function(s,h){return s+h.valor;},0)/hist.length;
+      return '<div class="sec"><h3>'+fruta+'</h3>'
+        +'<div class="row" style="margin-bottom:8px;">'
+        +'<div class="fld"><div class="lbl">Menor preço</div><div class="val" style="color:#10b981;">R$ '+min.toFixed(2)+'</div></div>'
+        +'<div class="fld"><div class="lbl">Preço médio</div><div class="val" style="color:#f97316;">R$ '+med.toFixed(2)+'</div></div>'
+        +'<div class="fld"><div class="lbl">Maior preço</div><div class="val" style="color:#ef4444;">R$ '+max.toFixed(2)+'</div></div>'
+        +'<div class="fld"><div class="lbl">Registros</div><div class="val">'+hist.length+'</div></div>'
+        +'</div>'
+        +'<table><tr><th>Data</th><th>Cliente</th><th>Valor/cx</th></tr>'
+        +hist.map(function(h){return '<tr><td>'+fmtDate(h.data)+'</td><td>'+h.cliente+'</td><td style="font-weight:700;color:#f97316;">R$ '+h.valor.toFixed(2)+'</td></tr>';}).join('')
+        +'</table></div>';
+    }).join('');
+  abrirJanelaImpressao('Histórico de Preços', corpo);
+}
+
+// ═══════════════════════════════════════════════════════════
+// RELATÓRIO DE COMISSÃO
+// ═══════════════════════════════════════════════════════════
+function modalComissao() {
+  var pct = parseFloat(localStorage.getItem('comissao_pct') || '3');
+  modal('<div class="section-title">💼 Relatório de Comissão</div>'
+    +'<div style="margin-bottom:12px;display:flex;gap:10px;align-items:flex-end;">'
+    +'<div style="flex:1;"><label class="lbl">% de Comissão</label>'
+    +'<input class="inp" id="com-pct" type="number" step="0.5" min="0" max="100" value="'+pct+'" style="max-width:100px;"></div>'
+    +'<button class="btn btn-p" onclick="gerarRelatorioComissao()">📊 Gerar</button>'
+    +'</div>'
+    +'<div id="com-resultado"></div>');
+}
+
+function gerarRelatorioComissao() {
+  var pct = parseFloat(document.getElementById('com-pct').value)||0;
+  localStorage.setItem('comissao_pct', pct);
+  // Group by usuario/vendedor - use pedidos from this month
+  var hoje = new Date();
+  var mesAtual = hoje.toISOString().slice(0,7);
+  var pedMes = DB.pedidos.filter(function(p){
+    return p.data_pedido && p.data_pedido.slice(0,7) === mesAtual && p.status === 'Atendido';
+  });
+  var totalVendas = pedMes.reduce(function(s,p){return s+(p.valor||0)*p.quantidade;},0);
+  var comissao = totalVendas * pct / 100;
+  // By cliente
+  var porCliente = {};
+  pedMes.forEach(function(p){
+    if(!porCliente[p.cliente_nome]) porCliente[p.cliente_nome]={pedidos:0,total:0};
+    porCliente[p.cliente_nome].pedidos++;
+    porCliente[p.cliente_nome].total += (p.valor||0)*p.quantidade;
+  });
+  var linhas = Object.keys(porCliente).sort(function(a,b){return porCliente[b].total-porCliente[a].total;}).map(function(c){
+    var com = porCliente[c].total * pct / 100;
+    return '<tr><td>'+c+'</td><td>'+porCliente[c].pedidos+'</td>'
+      +'<td>R$ '+porCliente[c].total.toFixed(2)+'</td>'
+      +'<td style="color:var(--green);font-weight:700;">R$ '+com.toFixed(2)+'</td></tr>';
+  }).join('');
+  var res = document.getElementById('com-resultado');
+  if(res) res.innerHTML = '<div style="margin-bottom:10px;padding:10px;background:#060a12;border-radius:8px;">'
+    +'<div style="display:flex;gap:16px;text-align:center;">'
+    +'<div style="flex:1;"><div style="font-size:9px;color:var(--muted);">Pedidos Atendidos</div><div style="font-size:16px;font-weight:800;color:var(--text)">'+pedMes.length+'</div></div>'
+    +'<div style="flex:1;"><div style="font-size:9px;color:var(--muted);">Total Vendas</div><div style="font-size:16px;font-weight:800;color:var(--accent)">R$ '+totalVendas.toFixed(2)+'</div></div>'
+    +'<div style="flex:1;"><div style="font-size:9px;color:var(--muted);">Comissão ('+pct+'%)</div><div style="font-size:16px;font-weight:800;color:var(--green)">R$ '+comissao.toFixed(2)+'</div></div>'
+    +'</div></div>'
+    +'<table class="tbl"><thead><tr><th>Cliente</th><th>Pedidos</th><th>Total Vendas</th><th>Comissão</th></tr></thead><tbody>'+linhas+'</tbody></table>'
+    +'<div style="margin-top:10px;display:flex;gap:8px;">'
+    +'<button class="btn btn-p btn-sm" onclick="imprimirComissao('+pct+')">🖨️ Imprimir</button>'
+    +'</div>';
+}
+
+function imprimirComissao(pct) {
+  var hoje = new Date();
+  var mesAtual = hoje.toISOString().slice(0,7);
+  var pedMes = DB.pedidos.filter(function(p){
+    return p.data_pedido && p.data_pedido.slice(0,7) === mesAtual && p.status === 'Atendido';
+  });
+  var totalVendas = pedMes.reduce(function(s,p){return s+(p.valor||0)*p.quantidade;},0);
+  var comissao = totalVendas * pct / 100;
+  var porCliente = {};
+  pedMes.forEach(function(p){
+    if(!porCliente[p.cliente_nome]) porCliente[p.cliente_nome]={pedidos:0,total:0};
+    porCliente[p.cliente_nome].pedidos++;
+    porCliente[p.cliente_nome].total += (p.valor||0)*p.quantidade;
+  });
+  var corpo = '<div class="pt">💼 Relatório de Comissão — '+hoje.toLocaleString('pt-BR',{month:'long',year:'numeric'})+'</div>'
+    +'<div style="display:flex;gap:10px;margin-bottom:14px;">'
+    +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Pedidos</div><div style="font-size:16px;font-weight:800;color:#f97316;">'+pedMes.length+'</div></div>'
+    +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Total Vendas</div><div style="font-size:16px;font-weight:800;color:#f97316;">R$ '+totalVendas.toFixed(2)+'</div></div>'
+    +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Comissão ('+pct+'%)</div><div style="font-size:18px;font-weight:800;color:#10b981;">R$ '+comissao.toFixed(2)+'</div></div>'
+    +'</div>'
+    +'<table><thead><tr><th>Cliente</th><th>Pedidos</th><th>Total Vendas</th><th>Comissão</th></tr></thead><tbody>'
+    +Object.keys(porCliente).sort(function(a,b){return porCliente[b].total-porCliente[a].total;}).map(function(c){
+      return '<tr><td style="font-weight:700;">'+c+'</td><td>'+porCliente[c].pedidos+'</td>'
+        +'<td>R$ '+porCliente[c].total.toFixed(2)+'</td>'
+        +'<td style="color:#10b981;font-weight:800;">R$ '+(porCliente[c].total*pct/100).toFixed(2)+'</td></tr>';
+    }).join('')+'</tbody></table>';
+  abrirJanelaImpressao('Relatório de Comissão', corpo);
+}
+
+// ═══════════════════════════════════════════════════════════
+// NOTIFICAÇÃO PEDIDOS PENDENTES
+// ═══════════════════════════════════════════════════════════
+var _notifInterval = null;
+function iniciarNotificacoes() {
+  if(_notifInterval) clearInterval(_notifInterval);
+  verificarPedidosPendentes();
+  _notifInterval = setInterval(verificarPedidosPendentes, 5 * 60 * 1000); // a cada 5 min
+}
+function verificarPedidosPendentes() {
+  var hoje = today();
+  var atrasados = DB.pedidos.filter(function(p){
+    return p.status === 'Pendente' && p.data_entrega < hoje;
+  });
+  var vencemHoje = DB.pedidos.filter(function(p){
+    return p.status === 'Pendente' && p.data_entrega === hoje;
+  });
+  var btn = document.getElementById('notif-btn');
+  if(!btn) return;
+  var total = atrasados.length + vencemHoje.length;
+  if(total > 0) {
+    btn.style.display = 'flex';
+    btn.innerHTML = '🔔 <span style="background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;">'+total+'</span>';
+    btn.title = atrasados.length+' atrasado(s), '+vencemHoje.length+' vencem hoje';
+  } else {
+    btn.style.display = 'none';
+  }
+}
+function abrirNotificacoes() {
+  var hoje = today();
+  var atrasados = DB.pedidos.filter(function(p){return p.status==='Pendente'&&p.data_entrega<hoje;});
+  var vencemHoje = DB.pedidos.filter(function(p){return p.status==='Pendente'&&p.data_entrega===hoje;});
+  var vencemAmanha = DB.pedidos.filter(function(p){
+    var amanha = new Date(); amanha.setDate(amanha.getDate()+1);
+    return p.status==='Pendente'&&p.data_entrega===amanha.toISOString().split('T')[0];
+  });
+  var linhas = function(lista,cor,label){
+    if(!lista.length) return '';
+    return '<div style="margin-bottom:10px;">'
+      +'<div style="font-size:11px;font-weight:700;color:'+cor+';margin-bottom:6px;">'+label+' ('+lista.length+')</div>'
+      +lista.map(function(p){
+        return '<div style="display:flex;justify-content:space-between;padding:6px 8px;background:#0d1320;border-radius:6px;margin-bottom:4px;font-size:11px;">'
+          +'<div><strong style="color:var(--text)">'+p.cliente_nome+'</strong> — '+p.fruta+' — '+p.quantidade+' cx</div>'
+          +'<div style="display:flex;gap:6px;align-items:center;">'
+          +'<span style="color:'+cor+';">'+fmtDate(p.data_entrega)+'</span>'
+          +'<button class="btn btn-g btn-sm" onclick="closeModal();goTo(&quot;pedidos&quot;)">✓ Ver</button>'
+          +'</div></div>';
+      }).join('')+'</div>';
+  };
+  modal('<div class="section-title">🔔 Pedidos Pendentes</div>'
+    +linhas(atrasados,'var(--red)','⚠️ Atrasados')
+    +linhas(vencemHoje,'var(--yellow)','📅 Vencem Hoje')
+    +linhas(vencemAmanha,'var(--sub)','⏰ Vencem Amanhã')
+    +(atrasados.length+vencemHoje.length+vencemAmanha.length===0?'<div class="empty">✅ Nenhum pedido urgente!</div>':'')
+    +'<div style="margin-top:10px;display:flex;gap:8px;">'
+    +'<button class="btn btn-p btn-sm" onclick="goTo(&quot;pedidos&quot;);closeModal()">Ver todos pedidos</button>'
+    +'<button class="btn btn-s" onclick="closeModal()">Fechar</button>'
+    +'</div>');
 }
 
 </script>
