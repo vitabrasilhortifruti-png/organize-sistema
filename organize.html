@@ -466,9 +466,10 @@ function goTo(page) {
     dashboard:renderDashboard, empresa:renderEmpresa, produtos:renderProdutos,
     cadastros:renderCadastros, entrada:renderEntrada, pedidos:renderPedidos,
     romaneio:renderRomaneio, vendas:renderVendas, caixas:renderCaixas,
-    estoque:renderEstoque, financeiro:renderFinanceiro, relatorios:renderRelatorios
+    estoque:renderEstoque, financeiro:renderFinanceiro, relatorios:renderRelatorios,
+    backup:renderBackupPage
   };
-  if (renders[page]) renders[page]();
+  if (renders[page]) { try { renders[page](); } catch(e) { console.error('Render error:', e); } }
   if(page === 'estoque' || page === 'entrada') {
     setTimeout(renderDescartesList, 150);
   }
