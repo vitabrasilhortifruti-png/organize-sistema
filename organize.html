@@ -3695,10 +3695,26 @@ function limparFiltrosDescarte() {
 }
 
 async function delDescarte(id) {
-  if(!confirm('Excluir este descarte?')) return;
-  await DEL('/api/descartes/'+id);
+  var d = (DB.descartes||[]).find(function(x){return x.id===id;});
+  if(!d) return;
+  var msgConfirm = 'Excluir descarte de '+d.quantidade+' unid. de '+d.fruta+' — Lote: '+d.lote+'?\nA quantidade será RESTAURADA ao saldo do lote.';
+  if(!confirm(msgConfirm)) return;
+
+  var res = await DEL('/api/descartes/'+id+'/restaurar');
+  if(!res) return;
+
+  // Remove from local DB
   DB.descartes = (DB.descartes||[]).filter(function(x){return x.id!==id;});
-  toast('Descarte excluído');
+
+  // Restore in local entrada
+  var e = DB.entradas.find(function(x){return x.id===d.lote_id || x.lote===d.lote;});
+  if(e) {
+    e.quantidade_atual = (e.quantidade_atual||0) + d.quantidade;
+    e.status = 'disponivel';
+  }
+
+  toast('✅ Descarte excluído! '+d.quantidade+' unid. de '+d.lote+' restaurados ao estoque.');
+  await loadAllData();
   renderDescartesList();
 }
 

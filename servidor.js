@@ -482,6 +482,33 @@ crudRoutes('saidas_caixa',   ['cliente_id','data','quantidade','marca','obs']);
 crudRoutes('pagamentos',     ['cliente_id','valor','data','forma','recebedor','obs']);
 crudRoutes('descartes',      ['lote_id','lote','fruta','quantidade','motivo','data']);
 
+// ── CUSTOM DELETE DESCARTE: restaura saldo no lote ──────
+app.delete('/api/descartes/:id/restaurar', auth, async (req, res) => {
+  if (req.usuario.acesso !== 'admin')
+    return res.status(403).json({ erro: 'Apenas administradores podem excluir descartes' });
+
+  const descarte = await db.get('SELECT * FROM descartes WHERE id = ?', req.params.id);
+  if (!descarte) return res.status(404).json({ erro: 'Descarte não encontrado' });
+
+  // Restaurar quantidade no lote
+  const entrada = descarte.lote_id
+    ? await db.get('SELECT * FROM entradas WHERE id = ?', descarte.lote_id)
+    : await db.get('SELECT * FROM entradas WHERE lote = ?', descarte.lote);
+
+  if (entrada) {
+    const novoSaldo = (entrada.quantidade_atual || 0) + descarte.quantidade;
+    await db.run(
+      'UPDATE entradas SET quantidade_atual = ?, status = ? WHERE id = ?',
+      novoSaldo, 'disponivel', entrada.id
+    );
+  }
+
+  // Excluir o descarte
+  await db.run('DELETE FROM descartes WHERE id = ?', req.params.id);
+  fazerBackup('del-descarte-restaurar');
+  res.json({ ok: true, restaurado: descarte.quantidade, lote: descarte.lote });
+});
+
 // ── SALDO LOTE ───────────────────────────────────────────
 app.patch('/api/entradas/:id/saldo', auth, async (req, res) => {
   const { quantidade_atual, status, kg_abatido } = req.body;
