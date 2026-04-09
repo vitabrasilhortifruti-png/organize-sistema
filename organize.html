@@ -585,145 +585,160 @@ async function restaurarLote(lote_id, unidades) {
 // DASHBOARD
 // ═══════════════════════════════════════════════════════
 function renderDashboard() {
-  var content = document.getElementById('content');
-  var totalPedidos = DB.pedidos.length;
-  var pedPendentes = DB.pedidos.filter(function(p){return p.status==='Pendente';}).length;
-  var totalVendas = DB.vendas.reduce(function(s,v){return s+(v.valor||0);},0);
-  var kgEstoque = DB.entradas.reduce(function(s,e){var q=e.quantidade_atual!=null?e.quantidade_atual:e.quantidade; return s+q*(e.peso_unitario||1);},0);
-  var totalRecebido = DB.pagamentos.reduce(function(s,p){return s+(p.valor||0);},0);
-  var totalPedVal = DB.pedidos.reduce(function(s,p){return s+(p.valor||0)*p.quantidade;},0);
-  var aReceber = totalPedVal - totalRecebido;
+  var hoje = today();
+  var mesAtual = hoje.slice(0,7);
 
-  // Vendas por dia - ultimos 7 dias
-  var hoje = new Date();
-  var dias7 = [];
-  for(var i=6; i>=0; i--) {
-    var d = new Date(hoje); d.setDate(d.getDate()-i);
-    var ds = d.toISOString().split('T')[0];
-    var label = d.toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit'});
-    var vDia = DB.vendas.filter(function(v){return v.data===ds;}).reduce(function(s,v){return s+(v.valor||0);},0);
-    dias7.push({ds:ds,label:label,vendas:vDia});
-  }
-  var maxV = Math.max.apply(null,dias7.map(function(d){return d.vendas;}))||1;
+  // ── DADOS DO DIA ──────────────────────────────────────
+  var entradasHoje    = DB.entradas.filter(function(e){return e.data===hoje;});
+  var pedidosHoje     = DB.pedidos.filter(function(p){return p.data_pedido===hoje;});
+  var vendasHoje      = DB.vendas.filter(function(v){return v.data===hoje;});
+  var entregasHoje    = DB.pedidos.filter(function(p){return p.data_entrega===hoje && p.status==='Atendido';});
+  var entregasAbHoje  = DB.pedidos.filter(function(p){return p.data_entrega===hoje && p.status==='Pendente';});
 
-  // Top clientes
-  var cliMap = {};
-  DB.pedidos.forEach(function(p){if(!cliMap[p.cliente_nome])cliMap[p.cliente_nome]=0;cliMap[p.cliente_nome]+=(p.valor||0)*p.quantidade;});
-  var topCli = Object.keys(cliMap).map(function(k){return{nome:k,total:cliMap[k]};}).sort(function(a,b){return b.total-a.total;}).slice(0,5);
-  var maxCli = topCli.length?topCli[0].total:1;
+  var kgHoje    = entradasHoje.reduce(function(s,e){return s+(e.total_kg||0);},0);
+  var cxVendHoje= vendasHoje.reduce(function(s,v){return s+(v.quantidade||0);},0);
+  var vlVendHoje= vendasHoje.reduce(function(s,v){return s+(v.valor||0);},0);
 
-  // Top frutas
-  var frutaMap = {};
-  DB.pedidos.forEach(function(p){if(!frutaMap[p.fruta])frutaMap[p.fruta]=0;frutaMap[p.fruta]+=(p.quantidade_kg||0);});
-  var topFrutas = Object.keys(frutaMap).map(function(k){return{nome:k,kg:frutaMap[k]};}).sort(function(a,b){return b.kg-a.kg;}).slice(0,5);
-  var maxFruta = topFrutas.length?topFrutas[0].kg:1;
+  // ── DADOS ACUMULATIVOS ────────────────────────────────
+  var totalEntradas  = DB.entradas.length;
+  var totalPedidos   = DB.pedidos.length;
+  var pedPendentes   = DB.pedidos.filter(function(p){return p.status==='Pendente';}).length;
+  var pedAtrasados   = DB.pedidos.filter(function(p){return p.status==='Pendente' && p.data_entrega<hoje;}).length;
+  var totalVendas    = DB.vendas.reduce(function(s,v){return s+(v.valor||0);},0);
+  var totalRecebido  = DB.pagamentos.reduce(function(s,p){return s+(p.valor||0);},0);
+  var kgEstoque      = DB.entradas.reduce(function(s,e){
+    var sd = e.quantidade_atual!=null?e.quantidade_atual:e.quantidade;
+    return s + (((e.tipo||'kg').toLowerCase()==='kg') ? sd : sd*(e.peso_unitario||1));
+  },0);
+  var totalClientes  = DB.clientes.length;
+  var totalFornec    = DB.fornecedores.length;
 
-  // Estoque por fruta
-  var estMap = {};
-  DB.entradas.forEach(function(e){var s=e.quantidade_atual!=null?e.quantidade_atual:e.quantidade;if(s>0){if(!estMap[e.fruta])estMap[e.fruta]={qtd:0,kg:0};estMap[e.fruta].qtd+=s;estMap[e.fruta].kg+=s*(e.peso_unitario||1);}});
+  // Meta de vendas mensal
+  var meta = getMetaVendas ? getMetaVendas() : 0;
+  var vendasMes = DB.vendas.filter(function(v){return v.data&&v.data.slice(0,7)===mesAtual;})
+    .reduce(function(s,v){return s+(v.valor||0);},0);
+  var metaPct = meta > 0 ? Math.min(100, Math.round(vendasMes/meta*100)) : 0;
+  var metaCor = metaPct>=100?'var(--green)':metaPct>=70?'var(--accent)':'var(--yellow)';
 
-  var cores = ['var(--accent)','#f59e0b','#10b981','#6366f1','#ec4899'];
-  var todayStr = today();
-
-  // Pedidos pendentes
-  var pedsPend = DB.pedidos.filter(function(p){return p.status==='Pendente';});
-  var pendHTML = '';
-  if(pedsPend.length>0) {
-    var rows = pedsPend.slice(0,5).map(function(p){
-      var atrasado = p.data_entrega < todayStr;
-      return '<tr>'
-        +'<td><strong style="color:var(--text)">'+p.cliente_nome+'</strong></td>'
-        +'<td>'+p.fruta+'</td><td>'+p.quantidade+'</td>'
-        +'<td style="color:'+(atrasado?'var(--red)':'var(--text)')+';">'+(atrasado?'⚠️ ':'')+fmtDate(p.data_entrega)+'</td>'
-        +'<td><button class="btn btn-g btn-sm" data-pid="'+p.id+'" onclick="modalAtenderPedido(this.dataset.pid)">✓ Atender</button></td>'
-        +'</tr>';
-    }).join('');
-    pendHTML = '<div class="card" style="margin-bottom:16px;border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.05);">'
-      +'<div class="section-title" style="color:var(--yellow);">⚠️ Pedidos Pendentes ('+pedsPend.length+')</div>'
-      +'<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Cliente</th><th>Fruta</th><th>Qtd (cx)</th><th>Peso (kg)</th><th>Entrega</th><th>Ação</th></tr></thead><tbody>'
-      +rows+'</tbody></table></div></div>';
-  }
-
-  // Grafico barras vendas
-  var barras = dias7.map(function(d){
-    var h = d.vendas>0 ? Math.max(6,Math.round((d.vendas/maxV)*100)) : 4;
-    var cor = d.vendas>0?'var(--accent)':'var(--border)';
-    var vlabel = d.vendas>0?'R$'+d.vendas.toFixed(0):'';
-    return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">'
-      +'<div style="font-size:8px;color:var(--sub);white-space:nowrap;">'+vlabel+'</div>'
-      +'<div style="width:100%;background:'+cor+';border-radius:4px 4px 0 0;height:'+h+'px;"></div>'
-      +'<div style="font-size:9px;color:var(--muted);text-align:center;">'+d.label+'</div>'
+  // Pendentes/atrasados alert
+  var alertHtml = '';
+  if(pedAtrasados>0) {
+    alertHtml += '<div style="padding:8px 12px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">'
+      +'<span style="font-size:12px;color:var(--red);font-weight:700;">⚠️ '+pedAtrasados+' pedido(s) ATRASADO(S)!</span>'
+      +'<button class="btn btn-sm" style="background:rgba(239,68,68,.2);border:1px solid var(--red);color:var(--red);font-size:10px;" onclick="goTo(&quot;pedidos&quot;)">Ver Pedidos</button>'
       +'</div>';
-  }).join('');
+  }
+  if(entregasAbHoje.length>0) {
+    alertHtml += '<div style="padding:8px 12px;background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.3);border-radius:8px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">'
+      +'<span style="font-size:12px;color:var(--accent);font-weight:700;">📅 '+entregasAbHoje.length+' entrega(s) para HOJE ainda pendente(s)!</span>'
+      +'<button class="btn btn-sm" style="font-size:10px;" onclick="goTo(&quot;pedidos&quot;)">Ver</button>'
+      +'</div>';
+  }
 
-  // Top clientes bars
-  var cliHTML = topCli.length===0
-    ? '<div class="empty">Nenhum pedido</div>'
-    : topCli.map(function(c,i){
-        var pct = Math.round((c.total/maxCli)*100);
-        return '<div style="margin-bottom:8px;">'
-          +'<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px;">'
-          +'<span style="color:var(--text);font-weight:600;">'+(i+1)+'. '+c.nome+'</span>'
-          +'<span style="color:'+cores[i]+';">'+fmtMoney(c.total)+'</span></div>'
-          +'<div class="pbar"><div class="pbar-fill" style="width:'+pct+'%;background:'+cores[i]+';"></div></div>'
-          +'</div>';
-      }).join('');
+  document.getElementById('content').innerHTML =
+    alertHtml
 
-  // Top frutas bars
-  var frutaHTML = topFrutas.length===0
-    ? '<div class="empty">Nenhum pedido</div>'
-    : topFrutas.map(function(f,i){
-        var pct = Math.round((f.kg/maxFruta)*100);
-        return '<div style="margin-bottom:8px;">'
-          +'<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px;">'
-          +'<span style="color:var(--text);font-weight:600;">'+(i+1)+'. '+f.nome+'</span>'
-          +'<span style="color:'+cores[i]+';">'+f.kg.toFixed(0)+' kg</span></div>'
-          +'<div class="pbar"><div class="pbar-fill" style="width:'+pct+'%;background:'+cores[i]+';"></div></div>'
-          +'</div>';
-      }).join('');
-
-  // Estoque HTML
-  var estFrutas = Object.keys(estMap);
-  var estHTML = estFrutas.length===0
-    ? '<div class="empty">Estoque zerado</div>'
-    : estFrutas.map(function(f){
-        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">'
-          +'<span style="font-size:12px;font-weight:600;color:var(--text);">'+f+'</span>'
-          +'<div style="display:flex;gap:10px;font-size:11px;">'
-          +'<span style="color:var(--sub);">'+estMap[f].qtd+' un</span>'
-          +'<span style="color:var(--accent);font-weight:700;">'+estMap[f].kg.toFixed(0)+' kg</span>'
-          +'</div></div>';
-      }).join('');
-
-  content.innerHTML =
-    '<div class="grid4" style="margin-bottom:16px;">'
-    +'<div class="stat"><div class="stat-icon">📦 Entradas</div><div class="stat-n">'+DB.entradas.length+'</div><div class="stat-l">lotes registrados</div></div>'
-    +'<div class="stat"><div class="stat-icon">📋 Pedidos</div><div class="stat-n">'+totalPedidos+'</div><div class="stat-l" style="color:'+(pedPendentes>0?'var(--yellow)':'var(--muted)')+'">'+pedPendentes+' pendente(s)</div></div>'
-    +'<div class="stat"><div class="stat-icon">⚖️ KG Estoque</div><div class="stat-n">'+kgEstoque.toFixed(0)+'</div><div class="stat-l">kg disponível</div></div>'
-    +'<div class="stat"><div class="stat-icon">💰 Vendas</div><div class="stat-n" style="font-size:16px;">'+fmtMoney(totalVendas)+'</div><div class="stat-l">'+DB.vendas.length+' registros</div></div>'
-    +'<div class="stat"><div class="stat-icon">✅ Recebido</div><div class="stat-n" style="font-size:16px;color:var(--green);">'+fmtMoney(totalRecebido)+'</div><div class="stat-l">'+DB.pagamentos.length+' pagtos</div></div>'
-    +'<div class="stat"><div class="stat-icon" style="color:'+(aReceber>0?'var(--red)':'var(--green)')+'">⚠️ A Receber</div><div class="stat-n" style="font-size:16px;color:'+(aReceber>0?'var(--red)':'var(--green)')+';">'+fmtMoney(Math.abs(aReceber))+'</div><div class="stat-l">'+(aReceber>0?'em aberto':'quitado')+'</div></div>'
-    +'<div class="stat"><div class="stat-icon">👥 Clientes</div><div class="stat-n">'+DB.clientes.length+'</div><div class="stat-l">cadastrados</div></div>'
-    +'<div class="stat"><div class="stat-icon">🚛 Fornecedores</div><div class="stat-n">'+DB.fornecedores.length+'</div><div class="stat-l">cadastrados</div></div>'
+    // ── BLOCO 1: MOVIMENTO DO DIA ────────────────────────
+    +'<div style="margin-bottom:6px;display:flex;align-items:center;gap:8px;">'
+    +'<div style="font-size:13px;font-weight:800;color:var(--text);">📅 Movimento de Hoje — '+new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"2-digit"})+'</div>'
     +'</div>'
-    +pendHTML
-    +'<div class="grid2" style="margin-bottom:16px;">'
-    +'<div class="card"><div class="section-title">📈 Vendas — Últimos 7 dias</div>'
-    +'<div style="display:flex;align-items:flex-end;gap:6px;height:130px;padding-bottom:20px;">'+barras+'</div></div>'
-    +'<div class="card"><div class="section-title">🏆 Top Clientes</div>'+cliHTML+'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;">'
+
+    // Entradas hoje
+    +'<div class="stat" style="cursor:pointer;" onclick="goTo(&quot;entrada&quot;)">'
+    +'<div class="stat-icon">⬇️ Entradas Hoje</div>'
+    +'<div class="stat-n" style="color:var(--green);">'+entradasHoje.length+'</div>'
+    +'<div class="stat-s">'+kgHoje.toFixed(0)+' kg recebidos</div>'
     +'</div>'
-    +'<div class="grid2" style="margin-bottom:16px;">'
-    +'<div class="card"><div class="section-title">🍊 Frutas Mais Pedidas</div>'+frutaHTML+'</div>'
-    +'<div class="card"><div class="section-title">📦 Estoque por Fruta</div>'+estHTML+'</div>'
+
+    // Pedidos hoje
+    +'<div class="stat" style="cursor:pointer;" onclick="goTo(&quot;pedidos&quot;)">'
+    +'<div class="stat-icon">📋 Pedidos Hoje</div>'
+    +'<div class="stat-n" style="color:var(--accent);">'+pedidosHoje.length+'</div>'
+    +'<div class="stat-s">'+pedidosHoje.reduce(function(s,p){return s+p.quantidade;},0)+' cx lançadas</div>'
     +'</div>'
-    +'<div class="card"><div class="section-title">🔒 Banco de Dados</div>'
-    +'<div style="font-size:12px;color:var(--sub);line-height:2;">'
-    +'✅ <strong>Dados salvos no servidor</strong> — backup automático ativo<br>'
-    +'🔄 Sincronização em tempo real<br>'
-    +'💾 Backups automáticos a cada 10 minutos<br>'
-    +'🔒 Dados persistentes</div></div>';
+
+    // Vendas hoje
+    +'<div class="stat" style="cursor:pointer;" onclick="goTo(&quot;vendas&quot;)">'
+    +'<div class="stat-icon">💰 Vendas Hoje</div>'
+    +'<div class="stat-n" style="color:var(--yellow);">'+cxVendHoje+' cx</div>'
+    +'<div class="stat-s">'+fmtMoney(vlVendHoje)+'</div>'
+    +'</div>'
+
+    // Entregas hoje
+    +'<div class="stat" style="cursor:pointer;" onclick="goTo(&quot;romaneio&quot;)">'
+    +'<div class="stat-icon">🚚 Entregas Hoje</div>'
+    +'<div class="stat-n" style="color:'+(entregasAbHoje.length>0?'var(--red)':'var(--green)')+';">'+entregasAbHoje.length+'</div>'
+    +'<div class="stat-s">'+(entregasAbHoje.length>0?'<span style="color:var(--red)">pendentes hoje</span>':'✅ em dia')+'</div>'
+    +'</div>'
+    +'</div>'
+
+    // ── ENTREGAS PENDENTES HOJE ──────────────────────────
+    +(entregasAbHoje.length>0
+      ? '<div class="card" style="margin-bottom:14px;border:1px solid rgba(249,115,22,.3);">'
+        +'<div class="section-title" style="color:var(--accent);margin-bottom:8px;">📅 Para Entregar Hoje ('+entregasAbHoje.length+')</div>'
+        +'<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Cliente</th><th>Fruta</th><th>Caixas</th><th>Status</th><th></th></tr></thead><tbody>'
+        +entregasAbHoje.map(function(p){
+          return '<tr>'
+            +'<td style="font-weight:700;">'+p.cliente_nome+'</td>'
+            +'<td>'+p.fruta+'</td>'
+            +'<td style="color:var(--accent);font-weight:700;">'+p.quantidade+' cx</td>'
+            +'<td><span class="badge bo">'+p.status+'</span></td>'
+            +'<td><button class="btn btn-g btn-sm" onclick="goTo(&quot;pedidos&quot;)">Ver</button></td>'
+            +'</tr>';
+        }).join('')
+        +'</tbody></table></div></div>'
+      : '')
+
+    // ── SEPARADOR ────────────────────────────────────────
+    +'<div style="margin-bottom:6px;margin-top:4px;display:flex;align-items:center;gap:8px;">'
+    +'<div style="font-size:13px;font-weight:800;color:var(--text);">📊 Totais Acumulativos</div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;">'
+    +'<div class="stat" data-page="entrada" onclick="goTo(this.dataset.page)" style="cursor:pointer;"><div class="stat-icon">📦 Entradas</div><div class="stat-n">'+totalEntradas+'</div><div class="stat-s">total de lotes</div></div>'
+    +'<div class="stat" data-page="pedidos" onclick="goTo(this.dataset.page)" style="cursor:pointer;"><div class="stat-icon">📋 Pedidos</div><div class="stat-n">'+totalPedidos+'</div><div class="stat-s"><span style="color:var(--yellow)">'+pedPendentes+' pendentes</span></div></div>'
+    +'<div class="stat"><div class="stat-icon">📦 KG Estoque</div><div class="stat-n">'+kgEstoque.toFixed(0)+'</div><div class="stat-s">kg disponível</div></div>'
+    +'<div class="stat" data-page="financeiro" onclick="goTo(this.dataset.page)" style="cursor:pointer;"><div class="stat-icon">💰 Vendas Total</div><div class="stat-n">'+fmtMoney(totalVendas)+'</div><div class="stat-s">'+fmtMoney(totalRecebido)+' recebido</div></div>'
+    +'</div>'
+
+    // ── META DE VENDAS ───────────────────────────────────
+    +(meta>0
+      ? '<div class="card" style="margin-bottom:14px;">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+        +'<div style="font-size:12px;font-weight:700;color:var(--text);">🎯 Meta Mensal de Vendas</div>'
+        +'<div style="display:flex;gap:8px;align-items:center;font-size:11px;color:var(--muted);">'
+        +fmtMoney(vendasMes)+' / '+fmtMoney(meta)
+        +'<span style="font-size:13px;font-weight:800;color:'+metaCor+';">'+metaPct+'%</span>'
+        +'<button class="btn btn-s btn-sm" onclick="modalMetaVendas()" style="font-size:9px;padding:2px 6px;">✏️</button>'
+        +'</div></div>'
+        +'<div style="height:12px;background:#0d1320;border-radius:6px;overflow:hidden;">'
+        +'<div style="height:12px;border-radius:6px;background:'+metaCor+';width:'+metaPct+'%;transition:width .5s;"></div>'
+        +'</div>'
+        +(metaPct>=100?'<div style="font-size:10px;color:var(--green);margin-top:4px;font-weight:700;">🎉 Meta atingida! R$ '+(vendasMes-meta).toFixed(2)+' acima!</div>':'')
+        +'</div>'
+      : '<div style="text-align:right;margin-bottom:10px;"><button class="btn btn-s btn-sm" onclick="modalMetaVendas()">🎯 Definir Meta de Vendas</button></div>')
+
+    // ── ÚLTIMAS ENTRADAS DO DIA ──────────────────────────
+    +(entradasHoje.length>0
+      ? '<div class="card" style="margin-bottom:14px;">'
+        +'<div class="section-title" style="margin-bottom:8px;">⬇️ Entradas de Hoje</div>'
+        +'<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Lote</th><th>Fruta</th><th>Fornecedor</th><th>Qtd</th><th>KG</th></tr></thead><tbody>'
+        +entradasHoje.map(function(e){
+          var forn = DB.fornecedores.find(function(f){return f.id===e.fornecedor_id;});
+          return '<tr><td><span class="badge bo">'+e.lote+'</span></td>'
+            +'<td style="font-weight:600;">'+e.fruta+'</td>'
+            +'<td>'+(forn?forn.nome:'-')+'</td>'
+            +'<td>'+e.quantidade+'</td>'
+            +'<td style="color:var(--green);font-weight:700;">'+(e.total_kg||0).toFixed(0)+' kg</td>'
+            +'</tr>';
+        }).join('')
+        +'</tbody></table></div></div>'
+      : '')
+    ;
+
   lucide.createIcons();
 }
+
 
 // ═══════════════════════════════════════════════════════
 // EMPRESA
