@@ -163,6 +163,13 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1) brightnes
       </div>
       <div id="login-loading" style="display:none;text-align:center;margin-bottom:10px;font-size:12px;color:var(--sub);">⏳ Conectando...</div>
       <button class="btn btn-p" id="btn-entrar" style="width:100%;justify-content:center;padding:11px;" onclick="loginSubmit()">Entrar</button>
+      <div id="token-login-area" style="margin-top:10px;display:none;">
+        <input class="inp" id="token-input" placeholder="Cole o token de emergência aqui">
+        <button class="btn btn-s" style="width:100%;margin-top:6px;" onclick="loginComToken()">Entrar com Token</button>
+      </div>
+      <div style="margin-top:8px;text-align:center;">
+        <button style="background:none;border:none;color:var(--muted);font-size:10px;cursor:pointer;" onclick="document.getElementById('token-login-area').style.display='block'">Acesso emergência</button>
+      </div>
       <div style="text-align:center;margin-top:14px;font-size:10px;color:var(--muted);">Organize © 2026 — Acesso restrito</div>
     </div>
 
@@ -353,6 +360,22 @@ function syncHeader() {
 function togglePass() {
   const p = document.getElementById('login-pass');
   p.type = p.type === 'password' ? 'text' : 'password';
+}
+
+async function loginComToken() {
+  var token = document.getElementById('token-input').value.trim();
+  if(!token) return;
+  TOKEN = token;
+  localStorage.setItem('org_token', TOKEN);
+  var me = await fetch(API+'/api/me',{headers:{'x-token':TOKEN}}).then(r=>r.ok?r.json():null).catch(()=>null);
+  if(!me) { alert('Token inválido'); return; }
+  CURRENT_USER = me;
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='flex';
+  document.getElementById('usr-badge').textContent = me.acesso==='admin'?'👑 ADMIN':'⭐ '+me.acesso;
+  document.getElementById('usr-nome').textContent = me.nome||me.email;
+  await loadAllData();
+  goTo('dashboard');
 }
 
 async function loginSubmit() {
