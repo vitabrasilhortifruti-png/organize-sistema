@@ -1006,6 +1006,15 @@ function renderEntrada() {
     <div style="margin-bottom:10px;"><label class="lbl">Observações</label><input class="inp" id="en-obs" placeholder="Observações opcionais"></div>
     <div style="display:flex;gap:8px;"><button class="btn btn-p" onclick="addEntrada()"><i data-lucide="plus" style="width:13px;height:13px;"></i> Registrar Entrada</button><button class="btn btn-s" onclick="limparForm(['en-lote','en-qtd','en-peso','en-obs','en-total-kg'])">🗑 Limpar</button></div>
   </div>
+  <div class="card" style="margin-bottom:10px;background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.2);">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--red);">🗑️ Registrar Descarte</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">Use o botão 🗑️ em cada lote ou clique em Novo Descarte</div>
+      </div>
+      <button class="btn btn-sm" onclick="modalDescarteSelecionar()" style="background:rgba(239,68,68,.15);border:1px solid #ef4444;color:#ef4444;font-weight:700;">🗑️ Novo Descarte</button>
+    </div>
+  </div>
   <div class="card" style="margin-bottom:10px;">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <span style="font-size:11px;color:var(--sub);font-weight:600;">🔍 Filtros:</span>
@@ -2136,6 +2145,15 @@ function renderEstoque() {
     <div class="stat"><div class="stat-icon">⚖️ KG Disponível</div><div class="stat-n">${kgTotal.toFixed(0)}</div></div>
     <div class="stat"><div class="stat-icon">🔴 Esgotados</div><div class="stat-n">${saldos.filter(s=>s.saldo<=0).length}</div></div>
     <div class="stat"><div class="stat-icon">📋 Total Entradas</div><div class="stat-n">${saldos.length}</div></div>
+  </div>
+  <div class="card" style="margin-bottom:12px;background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.2);">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--red);">🗑️ Registrar Descarte de Produto</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">Clique no lote e use o botão 🗑️ ou clique em Novo Descarte</div>
+      </div>
+      <button class="btn btn-sm" onclick="modalDescarteSelecionar()" style="background:rgba(239,68,68,.15);border:1px solid #ef4444;color:#ef4444;font-weight:700;padding:8px 14px;">🗑️ Novo Descarte</button>
+    </div>
   </div>
   <div class="card">
     <div class="section-title">Detalhamento por Lote</div>
@@ -3543,6 +3561,80 @@ function gerarRelatorioComissao() {
     +'<div style="flex:1;background:#060a12;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:9px;color:var(--muted)">Comissão ('+pct+'%)</div><div style="font-size:15px;font-weight:800;color:var(--green)">R$ '+comissao.toFixed(2)+'</div></div>'
     +'</div>'
     +'<table class="tbl"><thead><tr><th>Cliente</th><th>Pedidos</th><th>Total</th><th>Comissão</th></tr></thead><tbody>'+linhas+'</tbody></table>';
+}
+
+
+function modalDescarteSelecionar() {
+  var lotesDisp = DB.entradas.filter(function(e){
+    var s = e.quantidade_atual!=null ? e.quantidade_atual : e.quantidade;
+    return s > 0;
+  });
+  if(lotesDisp.length === 0) {
+    return toast('Nenhum lote com saldo disponível para descarte','warn');
+  }
+  var opts = lotesDisp.map(function(e){
+    var s = e.quantidade_atual!=null ? e.quantidade_atual : e.quantidade;
+    var tipo = (e.tipo||'kg').toLowerCase();
+    return '<option value="'+e.id+'" data-lote="'+e.lote+'" data-fruta="'+e.fruta+'">'+e.lote+' — '+e.fruta+' ('+s+' '+tipo+')</option>';
+  }).join('');
+
+  modal('<div class="section-title" style="color:var(--red);">🗑️ Registrar Descarte</div>'
+    +'<div style="margin-bottom:14px;">'
+    +'<label class="lbl">Selecione o Lote <span style="color:var(--red)">*</span></label>'
+    +'<select class="inp" id="desc-lote-sel" onchange="atualizarLoteDescarte(this)">'
+    +'<option value="">-- Selecione o lote --</option>'
+    +opts
+    +'</select></div>'
+    +'<div id="desc-form-area" style="display:none;">'
+    +'<div style="margin-bottom:10px;">'
+    +'<label class="lbl">Quantidade a Descartar <span style="color:var(--red)">*</span></label>'
+    +'<div style="display:flex;gap:8px;align-items:center;">'
+    +'<input class="inp" id="desc-qtd" type="number" min="1" placeholder="0" style="max-width:120px;">'
+    +'<span id="desc-tipo-label" style="font-size:11px;color:var(--muted);"></span>'
+    +'</div></div>'
+    +'<div style="margin-bottom:10px;">'
+    +'<label class="lbl">Motivo do Descarte <span style="color:var(--red)">*</span></label>'
+    +'<select class="inp" id="desc-motivo-sel" onchange="toggleMotivoOutro(this.value)">'
+    +'<option value="">Selecione o motivo...</option>'
+    +'<option>Produto vencido</option>'
+    +'<option>Deterioração por qualidade</option>'
+    +'<option>Dano físico (amassado/machucado)</option>'
+    +'<option>Contaminação</option>'
+    +'<option>Perda por temperatura</option>'
+    +'<option>Excesso de maturação</option>'
+    +'<option value="Outro">Outro (especificar)</option>'
+    +'</select></div>'
+    +'<div id="desc-outro-div" style="display:none;margin-bottom:10px;">'
+    +'<label class="lbl">Especifique <span style="color:var(--red)">*</span></label>'
+    +'<input class="inp" id="desc-motivo-outro" placeholder="Descreva o motivo...">'
+    +'</div>'
+    +'<div style="margin-bottom:14px;">'
+    +'<label class="lbl">Data</label>'
+    +'<input class="inp" id="desc-data" type="date" value="'+today()+'" style="max-width:160px;">'
+    +'</div>'
+    +'<div style="margin-bottom:14px;">'
+    +'<label class="lbl">Observações</label>'
+    +'<input class="inp" id="desc-obs" placeholder="Opcional...">'
+    +'</div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button class="btn btn-r" onclick="confirmarDescarte()" style="background:rgba(239,68,68,.15);border-color:var(--red);color:var(--red);">🗑️ Confirmar Descarte</button>'
+    +'<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+    +'</div>');
+}
+
+function atualizarLoteDescarte(sel) {
+  var id = sel.value;
+  if(!id) { document.getElementById('desc-form-area').style.display='none'; return; }
+  var e = DB.entradas.find(function(x){return x.id===id;});
+  if(!e) return;
+  window._descarteEntradaId = id;
+  var s = e.quantidade_atual!=null ? e.quantidade_atual : e.quantidade;
+  var tipo = (e.tipo||'kg').toLowerCase();
+  document.getElementById('desc-form-area').style.display='block';
+  document.getElementById('desc-tipo-label').textContent = tipo+' (saldo: '+s+')';
+  var qtdEl = document.getElementById('desc-qtd');
+  if(qtdEl) { qtdEl.max = s; qtdEl.placeholder = 'máx '+s; }
 }
 
 </script>
