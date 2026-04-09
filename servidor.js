@@ -556,6 +556,22 @@ app.post('/api/backup/email', authAdmin, async (req, res) => {
   res.json({ ok: true, msg: 'Backup salvo no servidor.' });
 });
 
+
+// ── EMERGENCY PASSWORD RESET (apenas se não conseguir logar) ──
+app.get('/api/reset-admin-password', async (req, res) => {
+  const secret = req.query.secret;
+  if (secret !== 'vitabrasil2026reset') {
+    return res.status(403).json({ erro: 'Acesso negado' });
+  }
+  const novaSenha = 'Organize@2026';
+  const hash = hashSenha(novaSenha);
+  await db.run(
+    "UPDATE usuarios SET senha = ? WHERE email = 'nildomoraesagro@gmail.com'",
+    hash
+  );
+  res.json({ ok: true, msg: 'Senha resetada para: Organize@2026', email: 'nildomoraesagro@gmail.com' });
+});
+
 openDB().then(() => {
   app.listen(PORT, () => {
     console.log(`✅ Organize Server rodando na porta ${PORT}`);
