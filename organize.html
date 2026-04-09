@@ -3230,57 +3230,24 @@ function imprimirRelatorioEntradas() {
 
 
 
-// ── DESCARTE ─────────────────────────────────────────────
-function modalDescarte(entradaId, lote, fruta) {
-  var e = DB.entradas.find(function(x){return x.id===entradaId;});
-  if(!e) return toast('Lote não encontrado','err');
-  var saldo = e.quantidade_atual!=null ? e.quantidade_atual : e.quantidade;
-  var tipoLabel = (e.tipo||'kg').toLowerCase()==='kg' ? 'kg' : 'caixas';
-  window._descarteEntradaId = entradaId;
-
-  modal(
-    '<div class="section-title" style="color:var(--red);">🗑️ Registrar Descarte</div>'
-    +'<div style="padding:10px;background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.3);border-radius:8px;margin-bottom:14px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;">'
-    +'<div><div style="font-size:9px;color:var(--muted);">LOTE</div><div style="font-weight:700;color:var(--text);">'+lote+'</div></div>'
-    +'<div><div style="font-size:9px;color:var(--muted);">FRUTA</div><div style="font-weight:700;color:var(--text);">'+fruta+'</div></div>'
-    +'<div><div style="font-size:9px;color:var(--muted);">SALDO</div><div style="font-weight:700;color:var(--red);">'+saldo+' '+tipoLabel+'</div></div>'
+function renderBackupPage() {
+  document.getElementById('content').innerHTML = '<div class="card">'
+    +'<div class="section-title">💾 Backup do Sistema</div>'
+    +'<div style="font-size:12px;color:var(--sub);margin-bottom:14px;">Backups automáticos a cada ação. Dados seguros no volume Railway.</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:16px;">'
+    +'<button class="btn btn-p" onclick="fazerBackupManual()"><i data-lucide="save" style="width:13px;height:13px;"></i> Fazer Backup Agora</button>'
     +'</div>'
-    +'<div style="margin-bottom:10px;">'
-    +'<label class="lbl">Quantidade a Descartar <span style="color:var(--red)">*</span></label>'
-    +'<div style="display:flex;align-items:center;gap:8px;">'
-    +'<input class="inp" id="desc-qtd" type="number" min="1" max="'+saldo+'" placeholder="0" style="max-width:120px;">'
-    +'<span style="font-size:11px;color:var(--muted);">'+tipoLabel+' (saldo: '+saldo+')</span>'
-    +'</div></div>'
-    +'<div style="margin-bottom:10px;">'
-    +'<label class="lbl">Motivo do Descarte <span style="color:var(--red)">*</span></label>'
-    +'<select class="inp" id="desc-motivo-sel" onchange="toggleMotivoOutro(this.value)">'
-    +'<option value="">Selecione o motivo...</option>'
-    +'<option value="Produto vencido">Produto vencido</option>'
-    +'<option value="Deterioração por qualidade">Deterioração por qualidade</option>'
-    +'<option value="Dano físico (amassado/machucado)">Dano físico (amassado/machucado)</option>'
-    +'<option value="Contaminação">Contaminação</option>'
-    +'<option value="Perda por temperatura">Perda por temperatura</option>'
-    +'<option value="Excesso de maturação">Excesso de maturação</option>'
-    +'<option value="Outro">Outro (especificar)</option>'
-    +'</select></div>'
-    +'<div id="desc-outro-div" style="display:none;margin-bottom:10px;">'
-    +'<label class="lbl">Especifique o motivo <span style="color:var(--red)">*</span></label>'
-    +'<input class="inp" id="desc-motivo-outro" placeholder="Descreva o motivo do descarte...">'
-    +'</div>'
-    +'<div style="margin-bottom:14px;">'
-    +'<label class="lbl">Data do Descarte</label>'
-    +'<input class="inp" id="desc-data" type="date" value="'+today()+'" style="max-width:160px;">'
-    +'</div>'
-    +'<div style="margin-bottom:14px;">'
-    +'<label class="lbl">Observações adicionais</label>'
-    +'<input class="inp" id="desc-obs" placeholder="Opcional...">'
-    +'</div>'
-    +'<div style="display:flex;gap:8px;">'
-    +'<button class="btn btn-r" onclick="confirmarDescarte()" style="background:rgba(239,68,68,.15);border-color:var(--red);color:var(--red);">🗑️ Confirmar Descarte</button>'
-    +'<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
-    +'</div>'
-  );
+    +'<div style="padding:12px;background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.2);border-radius:8px;font-size:12px;color:var(--sub);">'
+    +'✅ <strong style="color:var(--text)">Dados salvos no servidor Railway</strong><br>'
+    +'🔄 Sincronização em tempo real entre usuários<br>'
+    +'💾 Backup automático a cada ação e a cada 10 minutos<br>'
+    +'🔒 Volume persistente — atualizações não apagam dados'
+    +'</div></div>';
+  lucide.createIcons();
 }
+
+
+
 
 function toggleMotivoOutro(val) {
   var div = document.getElementById('desc-outro-div');
@@ -3633,21 +3600,6 @@ function atualizarLoteDescarte(sel) {
 
 
 // ── BACKUP PAGE ──────────────────────────────────────────
-function renderBackupPage() {
-  document.getElementById('content').innerHTML = '<div class="card">'
-    +'<div class="section-title">💾 Backup do Sistema</div>'
-    +'<div style="font-size:12px;color:var(--sub);margin-bottom:14px;">Backups automáticos a cada ação. Dados seguros no volume Railway.</div>'
-    +'<div style="display:flex;gap:8px;margin-bottom:16px;">'
-    +'<button class="btn btn-p" onclick="fazerBackupManual()"><i data-lucide="save" style="width:13px;height:13px;"></i> Fazer Backup Agora</button>'
-    +'</div>'
-    +'<div style="padding:12px;background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.2);border-radius:8px;font-size:12px;color:var(--sub);">'
-    +'✅ <strong style="color:var(--text)">Dados salvos no servidor Railway</strong><br>'
-    +'🔄 Sincronização em tempo real entre usuários<br>'
-    +'💾 Backup automático a cada ação e a cada 10 minutos<br>'
-    +'🔒 Volume persistente — atualizações não apagam dados'
-    +'</div></div>';
-  lucide.createIcons();
-}
 
 // ── ROMANEIO STATUS ───────────────────────────────────────
 async function atualizarStatusRomaneio(id, status) {
@@ -3690,34 +3642,57 @@ async function delDescarte(id) {
 }
 
 
-
 async function reabrirCarga(id) {
   var r = DB.romaneios.find(function(x){return x.id===id;});
   if(!r) return;
-  if(!confirm('Reabrir carga '+r.numero+'?')) return;
-  await PUT('/api/romaneios/'+id, {status: 'Em Aberto'});
+  if(!confirm('Reabrir carga '+r.numero+'? Os pedidos voltarão para seleção.')) return;
+  await PUT('/api/romaneios/'+id, {status:'Em Aberto'});
   r.status = 'Em Aberto';
-  toast('Carga reaberta!');
+  toast('✅ Carga '+r.numero+' reaberta!');
   await loadAllData();
   renderRomaneio();
 }
 
-async function limparFiltroRom() {
-  var el = document.getElementById('rom-f-data');
-  if(el) el.value = '';
-  filtrarHistRom();
+function selecionarTodosPeds() {
+  document.querySelectorAll('.rom-ped-cb').forEach(function(cb){cb.checked=true;});
+  atualizarResumoRom();
 }
 
 function filtrarHistRom() {
   var data = (document.getElementById('rom-f-data')||{}).value||'';
-  document.querySelectorAll('#rom-hist-rows tr').forEach(function(tr){
+  document.querySelectorAll('[data-data]').forEach(function(tr){
     tr.style.display = (!data || tr.dataset.data===data) ? '' : 'none';
   });
 }
 
-</script>
+function limparFiltroRom() {
+  var el=document.getElementById('rom-f-data'); if(el) el.value='';
+  filtrarHistRom();
+}
 
+function atualizarResumoRom() {
+  var cbs = document.querySelectorAll('.rom-ped-cb:checked');
+  var totalCx=0,totalKg=0,totalPal=0;
+  cbs.forEach(function(cb){
+    var p=DB.pedidos.find(function(x){return x.id===cb.value;});
+    if(p){totalCx+=p.quantidade;totalKg+=(p.quantidade_kg||0);totalPal+=Math.ceil(p.quantidade/30);}
+  });
+  var el=document.getElementById('rom-resumo');
+  if(!el) return;
+  if(cbs.length===0){el.innerHTML='Selecione pedidos acima';return;}
+  el.innerHTML='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center;">'
+    +'<div><div style="font-size:9px;color:var(--muted)">PEDIDOS</div><div style="font-size:16px;font-weight:800;color:var(--text)">'+cbs.length+'</div></div>'
+    +'<div><div style="font-size:9px;color:var(--muted)">CAIXAS</div><div style="font-size:16px;font-weight:800;color:var(--accent)">'+totalCx+'</div></div>'
+    +'<div><div style="font-size:9px;color:var(--muted)">KG</div><div style="font-size:16px;font-weight:800;color:var(--green)">'+totalKg.toFixed(0)+' kg</div></div>'
+    +'<div><div style="font-size:9px;color:var(--muted)">PALETES</div><div style="font-size:16px;font-weight:800;color:var(--yellow)">'+totalPal+' pal</div></div>'
+    +'</div>';
+}
+
+
+</script>
   <script>
+    // ServiceWorker disabled);
+    }
     // PWA install prompt
     var deferredPrompt;
     window.addEventListener('beforeinstallprompt', function(e) {
@@ -3739,7 +3714,58 @@ function filtrarHistRom() {
         });
       }
     }
-  </script>
+  
+// ── DESCARTE ─────────────────────────────────────────────
+function modalDescarte(entradaId, lote, fruta) {
+  var e = DB.entradas.find(function(x){return x.id===entradaId;});
+  if(!e) return toast('Lote não encontrado','err');
+  var saldo = e.quantidade_atual!=null ? e.quantidade_atual : e.quantidade;
+  var tipoLabel = (e.tipo||'kg').toLowerCase()==='kg' ? 'kg' : 'caixas';
+  window._descarteEntradaId = entradaId;
 
+  modal(
+    '<div class="section-title" style="color:var(--red);">🗑️ Registrar Descarte</div>'
+    +'<div style="padding:10px;background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.3);border-radius:8px;margin-bottom:14px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;">'
+    +'<div><div style="font-size:9px;color:var(--muted);">LOTE</div><div style="font-weight:700;color:var(--text);">'+lote+'</div></div>'
+    +'<div><div style="font-size:9px;color:var(--muted);">FRUTA</div><div style="font-weight:700;color:var(--text);">'+fruta+'</div></div>'
+    +'<div><div style="font-size:9px;color:var(--muted);">SALDO</div><div style="font-weight:700;color:var(--red);">'+saldo+' '+tipoLabel+'</div></div>'
+    +'</div>'
+    +'<div style="margin-bottom:10px;">'
+    +'<label class="lbl">Quantidade a Descartar <span style="color:var(--red)">*</span></label>'
+    +'<div style="display:flex;align-items:center;gap:8px;">'
+    +'<input class="inp" id="desc-qtd" type="number" min="1" max="'+saldo+'" placeholder="0" style="max-width:120px;">'
+    +'<span style="font-size:11px;color:var(--muted);">'+tipoLabel+' (saldo: '+saldo+')</span>'
+    +'</div></div>'
+    +'<div style="margin-bottom:10px;">'
+    +'<label class="lbl">Motivo do Descarte <span style="color:var(--red)">*</span></label>'
+    +'<select class="inp" id="desc-motivo-sel" onchange="toggleMotivoOutro(this.value)">'
+    +'<option value="">Selecione o motivo...</option>'
+    +'<option value="Produto vencido">Produto vencido</option>'
+    +'<option value="Deterioração por qualidade">Deterioração por qualidade</option>'
+    +'<option value="Dano físico (amassado/machucado)">Dano físico (amassado/machucado)</option>'
+    +'<option value="Contaminação">Contaminação</option>'
+    +'<option value="Perda por temperatura">Perda por temperatura</option>'
+    +'<option value="Excesso de maturação">Excesso de maturação</option>'
+    +'<option value="Outro">Outro (especificar)</option>'
+    +'</select></div>'
+    +'<div id="desc-outro-div" style="display:none;margin-bottom:10px;">'
+    +'<label class="lbl">Especifique o motivo <span style="color:var(--red)">*</span></label>'
+    +'<input class="inp" id="desc-motivo-outro" placeholder="Descreva o motivo do descarte...">'
+    +'</div>'
+    +'<div style="margin-bottom:14px;">'
+    +'<label class="lbl">Data do Descarte</label>'
+    +'<input class="inp" id="desc-data" type="date" value="'+today()+'" style="max-width:160px;">'
+    +'</div>'
+    +'<div style="margin-bottom:14px;">'
+    +'<label class="lbl">Observações adicionais</label>'
+    +'<input class="inp" id="desc-obs" placeholder="Opcional...">'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button class="btn btn-r" onclick="confirmarDescarte()" style="background:rgba(239,68,68,.15);border-color:var(--red);color:var(--red);">🗑️ Confirmar Descarte</button>'
+    +'<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+    +'</div>'
+  );
+}
+</script>
 </body>
 </html>
