@@ -1795,8 +1795,14 @@ function renderRomaneio() {
         +'<td>'+(r.rota||r.obs||'-')+'</td>'
         +'<td>'+r.caixas+' cx</td>'
         +'<td>'+fmtDate(r.data)+'</td>'
+        +'<td><select class="inp" style="padding:3px 4px;font-size:10px;max-width:120px;" data-rid="'+r.id+'" onchange="atualizarStatusRomaneio(this.dataset.rid,this.value)">'
+        +'<option value="Em Aberto"'+((!r.status||r.status==="Em Aberto")?" selected":"")+'>Em Aberto</option>'
+        +'<option value="Carregado"'+(r.status==="Carregado"?" selected":"")+'>Carregado</option>'
+        +'<option value="Entregue"'+(r.status==="Entregue"?" selected":"")+'>✅ Entregue</option>'
+        +'</select></td>'
         +'<td style="display:flex;gap:4px;">'
-        +'<button class="btn btn-p btn-sm" data-rid="'+r.id+'" onclick="imprimirRomaneio(this.dataset.rid)">🖨️</button>'
+        +'<button class="btn btn-p btn-sm" data-rid="'+r.id+'" onclick="imprimirRomaneio(this.dataset.rid)" title="Imprimir">🖨️</button>'
+        +'<button class="btn btn-g btn-sm" data-rid="'+r.id+'" onclick="reabrirCarga(this.dataset.rid)" title="Reabrir">↩️</button>'
         +'<button class="btn btn-r btn-sm" data-rid="'+r.id+'" onclick="delRomaneio(this.dataset.rid)"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button>'
         +'</td></tr>';
     }).join('')

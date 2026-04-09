@@ -159,10 +159,6 @@ const sessions = new Map();
 
 function auth(req, res, next) {
   const token = req.headers['x-token'];
-  if (token === 'EMERGENCY_VITABRASIL_2026_TOKEN') {
-    req.usuario = { id: 'mnhudykk2az0l', nome: 'Nildo Moraes', email: 'nildomoraesagro@gmail.com', acesso: 'admin' };
-    return next();
-  }
   if (!token || !sessions.has(token)) return res.status(401).json({ erro: 'Não autorizado' });
   req.usuario = sessions.get(token);
   next();
@@ -564,95 +560,8 @@ app.post('/api/backup/email', authAdmin, async (req, res) => {
 });
 
 
-// ── EMERGENCY PASSWORD RESET ──────────────────────────────
-app.get('/api/reset-admin-password', async (req, res) => {
-  const secret = req.query.secret;
-  if (secret !== 'vitabrasil2026reset') {
-    return res.status(403).json({ erro: 'Acesso negado' });
-  }
-  // Hash gravado literalmente para evitar problemas de encoding
-  const novaSenha = '123456';
-  const hash = '376d4d82a0c638224fb21bc5f37b2a427b8c5f3c518955ee3d407e66024d284f'; // sha256('123456' + 'organize_salt_2026')
-  
-  // Get current user state
-  const user = await db.get("SELECT id, email, acesso, ativo, LENGTH(senha) as senhaLen FROM usuarios WHERE email = 'nildomoraesagro@gmail.com'");
-  
-  // Reset password
-  const result = await db.run(
-    "UPDATE usuarios SET senha = ?, ativo = 1 WHERE email = 'nildomoraesagro@gmail.com'",
-    hash
-  );
-  
-  // Also ensure user exists
-  if (!user) {
-    const id = uid();
-    await db.run(
-      "INSERT INTO usuarios (id, nome, email, senha, acesso, ativo) VALUES (?, 'Admin', 'nildomoraesagro@gmail.com', ?, 'admin', 1)",
-      id, hash
-    );
-  }
-  
-  res.json({ 
-    ok: true, 
-    novaSenha: '123456',
-    email: 'nildomoraesagro@gmail.com',
-    usuarioAntes: user,
-    rowsAffected: result.changes,
-    hashEsperado: hash.substring(0, 20) + '...'
-  });
-});
-
-// ── CHECK USER STATUS ──────────────────────────────────────
-app.get('/api/check-user', async (req, res) => {
-  const secret = req.query.secret;
-  if (secret !== 'vitabrasil2026reset') return res.status(403).json({ erro: 'Negado' });
-  const users = await db.all("SELECT id, nome, email, acesso, ativo, senha, criado FROM usuarios");
-  const testHash = hashSenha('123456');
-  const literalHash = '376d4d82a0c638224fb21bc5f37b2a427b8c5f3c518955ee3d407e66024d284f';
-  res.json({ 
-    testHash,
-    literalHash,
-    dbPath: process.env.DB_PATH || '/app/data/organize.db',
-    users: users.map(u => ({
-      ...u,
-      senhaMatch123456: u.senha === testHash,
-      senhaFirst10: u.senha.substring(0,10)
-    }))
-  });
-});
 
 
-// ── EMERGENCY AUTO-LOGIN PAGE ────────────────────────────
-app.get('/entrar-agora', async (req, res) => {
-  const secret = req.query.s;
-  if (secret !== 'vb2026') return res.send('<h2>Acesso negado</h2>');
-  
-  const user = await db.get("SELECT * FROM usuarios WHERE email = 'nildomoraesagro@gmail.com' AND ativo = 1");
-  if (!user) return res.send('<h2>Usuario nao encontrado</h2>');
-  
-  const token = 'perm_' + crypto.randomBytes(32).toString('hex');
-  sessions.set(token, { id: user.id, nome: user.nome, email: user.email, acesso: user.acesso });
-  
-  // Return HTML page that auto-logs in
-  res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Entrando...</title></head><body>
-  <script>
-    localStorage.setItem('org_token', '${token}');
-    window.location.href = '/';
-  </script>
-  <p>Entrando no sistema... <a href="/">Clique aqui</a></p>
-  </body></html>`);
-});
-
-// ── TEST LOGIN DIRECT ─────────────────────────────────────
-app.get('/api/test-login', async (req, res) => {
-  const secret = req.query.secret;
-  if (secret !== 'vitabrasil2026reset') return res.status(403).json({ erro: 'Negado' });
-  const user = await db.get("SELECT * FROM usuarios WHERE email = 'nildomoraesagro@gmail.com' AND ativo = 1");
-  if (!user) return res.json({ erro: 'Usuario nao encontrado' });
-  const token = 'perm_' + crypto.randomBytes(32).toString('hex');
-  sessions.set(token, { id: user.id, nome: user.nome, email: user.email, acesso: user.acesso });
-  res.json({ ok: true, token, usuario: { id: user.id, nome: user.nome, email: user.email, acesso: user.acesso } });
-});
 
 openDB().then(() => {
   app.listen(PORT, () => {
