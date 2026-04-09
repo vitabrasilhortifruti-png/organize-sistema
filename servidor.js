@@ -626,9 +626,19 @@ app.get('/api/reset-admin-password', async (req, res) => {
 app.get('/api/check-user', async (req, res) => {
   const secret = req.query.secret;
   if (secret !== 'vitabrasil2026reset') return res.status(403).json({ erro: 'Negado' });
-  const users = await db.all("SELECT id, nome, email, acesso, ativo, LENGTH(senha) as senhaLen, criado FROM usuarios");
+  const users = await db.all("SELECT id, nome, email, acesso, ativo, senha, criado FROM usuarios");
   const testHash = hashSenha('123456');
-  res.json({ users, testHash: testHash.substring(0,20)+'...' });
+  const literalHash = '376d4d82a0c638224fb21bc5f37b2a427b8c5f3c518955ee3d407e66024d284f';
+  res.json({ 
+    testHash,
+    literalHash,
+    dbPath: process.env.DB_PATH || '/app/data/organize.db',
+    users: users.map(u => ({
+      ...u,
+      senhaMatch123456: u.senha === testHash,
+      senhaFirst10: u.senha.substring(0,10)
+    }))
+  });
 });
 
 openDB().then(() => {
