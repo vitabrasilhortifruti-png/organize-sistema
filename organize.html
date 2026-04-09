@@ -802,8 +802,16 @@ function renderProdutos() {
     return `<tr><td>${p.codigo}</td><td>${p.nome}</td><td>${p.tipo}</td><td>${p.peso} kg</td>
     <td>${jaExiste?'<span class="badge bg">✓ Adicionado</span>':`<button class="btn btn-p btn-sm" onclick="addPreset('${p.codigo}')"><i data-lucide="plus" style="width:11px;height:11px;"></i> Usar</button>`}</td></tr>`;}).join('')}
     </tbody></table></div>
-  </div>`;
+  </div>
+  <div class="card" style="margin-top:12px;" id="card-descartes">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div class="section-title" style="margin:0;">🗑️ Histórico de Descartes</div>
+      <button class="btn btn-p btn-sm" onclick="imprimirRelatorioDescartes()">🖨️ Relatório</button>
+    </div>
+    <div id="descartes-list"></div>
+  </div>\`;
   lucide.createIcons();
+  renderDescartesList();
 }
 async function addProduto() {
   const cod=document.getElementById('p-cod').value.trim(), nome=document.getElementById('p-nome').value.trim();
@@ -1073,8 +1081,22 @@ function renderEntrada() {
   </div>`;
   document.getElementById('en-fruta').onchange=function(){document.getElementById('en-fruta-nova-wrap').style.display=this.value==='__nova'?'block':'none';};
   lucide.createIcons();
-}
-function updateEntTipo() {
+  filtrarEntradas();
+  // Descarte section
+  (function(){
+    var _c = document.getElementById('content');
+    if(!_c) return;
+    var old = document.getElementById('card-descartes');
+    if(old) old.remove();
+    var _d = document.createElement('div');
+    _d.id = 'card-descartes';
+    _d.className = 'card';
+    _d.style.marginTop = '12px';
+    _d.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div class="section-title" style="margin:0;">🗑️ Histórico de Descartes</div><button class="btn btn-p btn-sm" onclick="imprimirRelatorioDescartes()">🖨️ Relatório</button></div><div id="descartes-list"></div>';
+    _c.appendChild(_d);
+    renderDescartesList();
+  })();
+}function updateEntTipo() {
   const t=document.querySelector('input[name="en-tipo"]:checked').value;
   document.getElementById('en-peso-wrap').style.display=t==='kg'?'none':'block';
   calcEntKg();
@@ -2179,8 +2201,22 @@ function renderEstoque() {
     </tbody></table></div>
   </div>`;
   lucide.createIcons();
+  renderEstoqueFiltrado();
+  // Descarte section
+  (function(){
+    var _c = document.getElementById('content');
+    if(!_c) return;
+    var old = document.getElementById('card-descartes');
+    if(old) old.remove();
+    var _d = document.createElement('div');
+    _d.id = 'card-descartes';
+    _d.className = 'card';
+    _d.style.marginTop = '12px';
+    _d.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div class="section-title" style="margin:0;">🗑️ Histórico de Descartes</div><button class="btn btn-p btn-sm" onclick="imprimirRelatorioDescartes()">🖨️ Relatório</button></div><div id="descartes-list"></div>';
+    _c.appendChild(_d);
+    renderDescartesList();
+  })();
 }
-
 // ═══════════════════════════════════════════════════════
 // FINANCEIRO
 // ═══════════════════════════════════════════════════════
