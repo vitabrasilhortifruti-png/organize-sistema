@@ -346,7 +346,7 @@ crudRoutes('produtos',       ['codigo','nome','tipo','peso']);
 crudRoutes('fornecedores',   ['nome','contato','email']);
 crudRoutes('clientes',       ['nome','contato','email','endereco']);
 crudRoutes('entradas',       ['lote','fruta','fornecedor_id','tipo','quantidade','quantidade_atual','peso_unitario','total_kg','data','obs','status']);
-crudRoutes('pedidos',        ['cliente_id','cliente_nome','fruta','mercadoria_id','mercadoria_nome','peso_unitario','quantidade','quantidade_kg','valor','data_pedido','data_entrega','bancas','lotes','obs','status']);
+crudRoutes('pedidos',        ['numero_pedido','cliente_id','cliente_nome','fruta','mercadoria_id','mercadoria_nome','peso_unitario','quantidade','quantidade_kg','valor','data_pedido','data_entrega','bancas','lotes','obs','status']);
 
 // ── CUSTOM DELETE VENDA: restaura estoque se tiver lote ──
 app.delete('/api/vendas/:id/completo', auth, async (req, res) => {
