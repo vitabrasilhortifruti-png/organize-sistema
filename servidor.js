@@ -108,6 +108,7 @@ async function openDB() {
   // Migrations: add columns if not exist
   try { await db.run("ALTER TABLE romaneios ADD COLUMN status TEXT DEFAULT 'Em Aberto'"); } catch(e) {}
   try { await db.run("ALTER TABLE romaneios ADD COLUMN rota TEXT DEFAULT ''"); } catch(e) {}
+  try { await db.run("ALTER TABLE pedidos ADD COLUMN numero_pedido TEXT DEFAULT ''"); } catch(e) {}
   
   console.log('Banco de dados pronto!');
 }
