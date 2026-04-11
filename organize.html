@@ -1180,6 +1180,7 @@ function filtrarPedidos() {
       +'<td><span class="badge '+(p.status==='Atendido'?'bg':p.status==='Pendente'?'by':'bo')+'">'+p.status+'</span></td>'
       +'<td style="display:flex;gap:4px;flex-wrap:wrap;">'
       +(p.status==='Pendente'?'<button class="btn btn-g btn-sm" data-pid="'+p.id+'" onclick="modalAtenderPedido(this.dataset.pid)">✓ Atender</button>':'')
+      +'<button class="btn btn-s btn-sm" data-pid="'+p.id+'" onclick="modalVerPedido(this.dataset.pid)" title="Ver detalhes">👁️</button>'
       +'<button class="btn btn-s btn-sm" data-pid="'+p.id+'" onclick="modalEditarPedido(this.dataset.pid)" title="Editar">✏️</button>'
       +'<button class="btn btn-s btn-sm" data-pid="'+p.id+'" onclick="imprimirPedido(this.dataset.pid)" title="Imprimir">🖨️</button>'
       +'<button class="btn btn-r btn-sm" data-pid="'+p.id+'" onclick="delPedido(this.dataset.pid)"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button>'
@@ -1346,7 +1347,7 @@ function renderPedidos() {
         <button class="btn btn-g btn-sm" onclick="imprimirRelatorioProducao()">📋 Produção</button>
       </div>
     </div>
-    <div class="tbl-wrap"><table class="tbl" id="ped-tabela"><thead><tr><th>Cliente</th><th>Fruta</th><th>Qtd (cx)</th><th>Peso Total</th><th>Valor</th><th>Entrega</th><th>Status</th><th>Ações</th></tr></thead><tbody>
+    <div class="tbl-wrap"><table class="tbl" id="ped-tabela"><thead><tr><th>Cliente</th><th>Fruta</th><th>Qtd (cx)</th><th>Peso Total</th><th>Valor</th><th>Entrega</th><th>Status</th><th>Ações</th></tr></thead><tbody id="ped-tbody">
     ${getPedidosFiltrados().map(p=>`<tr>
       <td style="color:var(--text);font-weight:600">${p.cliente_nome}</td>
       <td>${p.fruta}</td>
@@ -3101,9 +3102,13 @@ function renderPedidosFiltrado() {
   var filtrados = getPedidosFiltrados();
   var el = document.getElementById('ped-count');
   if(el) el.textContent = filtrados.length+'/'+DB.pedidos.length;
-  var tbody = document.getElementById('ped-tabela');
+  var tbody = document.getElementById('ped-tbody');
+  if(!tbody) {
+    // Fallback: find tbody inside ped-tabela
+    var tbl = document.getElementById('ped-tabela');
+    if(tbl) tbody = tbl.querySelector('tbody');
+  }
   if(!tbody) return;
-  // Remove thead from tbody before replacing
   var rows = filtrados.map(function(p) {
     var atrasado = p.data_entrega < today() && p.status === 'Pendente';
     return '<tr data-nome="'+p.cliente_nome.toLowerCase()+'">'
@@ -3116,6 +3121,7 @@ function renderPedidosFiltrado() {
       +'<td><span class="badge '+(p.status==='Atendido'?'bg':p.status==='Pendente'?'by':'bo')+'">'+p.status+'</span></td>'
       +'<td style="display:flex;gap:4px;flex-wrap:wrap;">'
       +(p.status==='Pendente'?'<button class="btn btn-g btn-sm" data-pid="'+p.id+'" onclick="modalAtenderPedido(this.dataset.pid)">✓ Atender</button>':'')
+      +'<button class="btn btn-s btn-sm" data-pid="'+p.id+'" onclick="modalVerPedido(this.dataset.pid)" title="Ver detalhes">👁️</button>'
       +'<button class="btn btn-s btn-sm" data-pid="'+p.id+'" onclick="modalEditarPedido(this.dataset.pid)" title="Editar">✏️</button>'
       +'<button class="btn btn-s btn-sm" data-pid="'+p.id+'" onclick="imprimirPedido(this.dataset.pid)" title="Imprimir">🖨️</button>'
       +'<button class="btn btn-r btn-sm" data-pid="'+p.id+'" onclick="delPedido(this.dataset.pid)"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button>'
@@ -3905,6 +3911,90 @@ function modalDescarte(entradaId, lote, fruta) {
         });
       }
     }
-  </script>
+  
+// ── VER PEDIDO COMPLETO ───────────────────────────────────
+function modalVerPedido(id) {
+  var p = DB.pedidos.find(function(x){return x.id===id;});
+  if(!p) return;
+  var cli = DB.clientes.find(function(c){return c.id===p.cliente_id;});
+  var atrasado = p.data_entrega < today() && p.status==='Pendente';
+  var pal = Math.ceil(p.quantidade/30);
+  var statusCor = p.status==='Atendido'?'var(--green)':p.status==='Pendente'?'var(--yellow)':'var(--accent)';
+
+  modal(
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'
+    +'<div class="section-title" style="margin:0;">📋 Pedido — '+p.cliente_nome+'</div>'
+    +'<span class="badge '+(p.status==='Atendido'?'bg':'by')+'">'+p.status+'</span>'
+    +'</div>'
+
+    // Cards de resumo
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">'
+    +'<div style="background:#060a12;border-radius:8px;padding:10px;text-align:center;">'
+    +'<div style="font-size:9px;color:var(--muted);">CAIXAS</div>'
+    +'<div style="font-size:20px;font-weight:800;color:var(--accent);">'+p.quantidade+'</div>'
+    +'</div>'
+    +'<div style="background:#060a12;border-radius:8px;padding:10px;text-align:center;">'
+    +'<div style="font-size:9px;color:var(--muted);">KG TOTAL</div>'
+    +'<div style="font-size:20px;font-weight:800;color:var(--green);">'+(p.quantidade_kg||0).toFixed(0)+'</div>'
+    +'</div>'
+    +'<div style="background:#060a12;border-radius:8px;padding:10px;text-align:center;">'
+    +'<div style="font-size:9px;color:var(--muted);">PALETES</div>'
+    +'<div style="font-size:20px;font-weight:800;color:#7c3aed;">'+pal+'</div>'
+    +'</div>'
+    +'<div style="background:#060a12;border-radius:8px;padding:10px;text-align:center;">'
+    +'<div style="font-size:9px;color:var(--muted);">VALOR</div>'
+    +'<div style="font-size:16px;font-weight:800;color:var(--accent);">'+fmtMoney((p.valor||0)*p.quantidade)+'</div>'
+    +'</div>'
+    +'</div>'
+
+    // Dados completos
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">'
+    +'<div style="background:#0d1320;border-radius:8px;padding:10px;">'
+    +'<div style="font-size:10px;color:var(--muted);font-weight:700;margin-bottom:8px;">CLIENTE</div>'
+    +'<div style="font-size:13px;font-weight:700;color:var(--text);">'+p.cliente_nome+'</div>'
+    +(cli?'<div style="font-size:11px;color:var(--muted);margin-top:4px;">'+(cli.contato||'')+'</div>':'')
+    +(cli&&cli.endereco?'<div style="font-size:10px;color:var(--sub);margin-top:2px;">'+cli.endereco+'</div>':'')
+    +'</div>'
+    +'<div style="background:#0d1320;border-radius:8px;padding:10px;">'
+    +'<div style="font-size:10px;color:var(--muted);font-weight:700;margin-bottom:8px;">PRODUTO</div>'
+    +'<div style="font-size:13px;font-weight:700;color:var(--text);">'+p.fruta+'</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-top:4px;">'+(p.mercadoria_nome||'-')+'</div>'
+    +'<div style="font-size:11px;color:var(--accent);margin-top:4px;">Bancas: '+(p.bancas||'-')+'</div>'
+    +'</div>'
+    +'</div>'
+
+    // Datas e obs
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">'
+    +'<div style="background:#0d1320;border-radius:8px;padding:8px;">'
+    +'<div style="font-size:9px;color:var(--muted);">DATA PEDIDO</div>'
+    +'<div style="font-size:12px;font-weight:700;color:var(--text);margin-top:3px;">'+fmtDate(p.data_pedido)+'</div>'
+    +'</div>'
+    +'<div style="background:#0d1320;border-radius:8px;padding:8px;'+(atrasado?'border:1px solid var(--red);':'')+'">'
+    +'<div style="font-size:9px;color:var(--muted);">ENTREGA</div>'
+    +'<div style="font-size:12px;font-weight:700;color:'+(atrasado?'var(--red)':'var(--accent)')+';margin-top:3px;">'+(atrasado?'⚠️ ':'')+fmtDate(p.data_entrega)+'</div>'
+    +'</div>'
+    +'<div style="background:#0d1320;border-radius:8px;padding:8px;">'
+    +'<div style="font-size:9px;color:var(--muted);">LOTES</div>'
+    +'<div style="font-size:10px;color:var(--sub);margin-top:3px;">'+(p.lotes||'A definir')+'</div>'
+    +'</div>'
+    +'</div>'
+
+    +(p.obs?'<div style="background:#0d1320;border-radius:8px;padding:8px;margin-bottom:12px;">'
+    +'<div style="font-size:9px;color:var(--muted);">OBS</div>'
+    +'<div style="font-size:11px;color:var(--text);margin-top:3px;">'+p.obs+'</div>'
+    +'</div>':'')
+
+    // Botões de ação
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+    +(p.status==='Pendente'?'<button class="btn btn-g" data-pid="'+p.id+'" onclick="closeModal();modalAtenderPedido(this.dataset.pid)">✓ Atender</button>':'')
+    +'<button class="btn btn-s" data-pid="'+p.id+'" onclick="closeModal();modalEditarPedido(this.dataset.pid)">✏️ Editar</button>'
+    +'<button class="btn btn-p btn-sm" data-pid="'+p.id+'" onclick="imprimirPedido(this.dataset.pid)">🖨️ Imprimir</button>'
+    +'<button class="btn btn-r btn-sm" data-pid="'+p.id+'" onclick="closeModal();delPedido(this.dataset.pid)">🗑️ Excluir</button>'
+    +'<button class="btn btn-s" onclick="closeModal()">Fechar</button>'
+    +'</div>'
+  );
+}
+
+</script>
 </body>
 </html>
