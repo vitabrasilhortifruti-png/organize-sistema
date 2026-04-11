@@ -1358,6 +1358,7 @@ function renderPedidos() {
       <td><span class="badge ${p.status==='Atendido'?'bg':p.status==='Pendente'?'by':'bo'}">${p.status}</span></td>
       <td style="display:flex;gap:4px;flex-wrap:wrap;">
         ${p.status==='Pendente'?`<button class="btn btn-g btn-sm" onclick="modalAtenderPedido('${p.id}')">✓ Atender</button>`:''}
+        <button class="btn btn-s btn-sm" onclick="modalVerPedido('${p.id}')" title="Ver detalhes">👁️</button>
         <button class="btn btn-s btn-sm" onclick="modalEditarPedido('${p.id}')" title="Editar">✏️</button>
         <button class="btn btn-s btn-sm" onclick="imprimirPedido('${p.id}')" title="Imprimir">🖨️</button>
         <button class="btn btn-r btn-sm" onclick="delPedido('${p.id}')"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button>
@@ -1408,7 +1409,42 @@ async function addPedido() {
   const merc=DB.produtos.find(p=>p.id===mercId);
   const payload={id:uid(),cliente_id:cliId,cliente_nome:cli ? cli.nome : '',fruta,mercadoria_id:mercId,mercadoria_nome:merc ? merc.nome : '',peso_unitario:peso,quantidade:qtd,quantidade_kg:kgNec,valor,data_pedido:dataPed,data_entrega:dataEnt,bancas,lotes:'A definir pela produção',obs,status:'Pendente'};
   const res=await POST('/api/pedidos',payload);
-  if(res){ DB.pedidos.unshift(res); toast('✓ Pedido criado!'); renderPedidos(); }
+  if(res){ DB.pedidos.unshift(res); }
+
+  // Salvar itens extras com os mesmos dados de cliente/data
+  var totalItens = 1;
+  for(var n=1; n<=itemExtraCount; n++) {
+    var itemDiv = document.getElementById('item-extra-'+n);
+    if(!itemDiv) continue;
+    var iFruta = (itemDiv.querySelector('.item-fruta-'+n)||{}).value||'';
+    var iMercEl = itemDiv.querySelector('.item-merc-'+n);
+    var iMercId = iMercEl ? iMercEl.value : '';
+    var iQtd = parseInt((itemDiv.querySelector('.item-qtd-'+n)||{}).value)||0;
+    var iValor = parseFloat((itemDiv.querySelector('.item-valor-'+n)||{}).value)||0;
+    var iObs = (itemDiv.querySelector('.item-obs-'+n)||{}).value||'';
+    var iBancas = Array.from(itemDiv.querySelectorAll('.item-banca-cb-'+n+':checked')).map(function(c){return c.value;}).join(', ');
+    if(!iFruta || !iMercId || iQtd<=0) continue; // pula itens incompletos
+    var iMerc = DB.produtos.find(function(p){return p.id===iMercId;});
+    var iPeso = iMerc ? parseFloat(iMerc.peso)||20 : 20;
+    var iPayload = {
+      id:uid(), cliente_id:cliId, cliente_nome:cli?cli.nome:'',
+      fruta:iFruta, mercadoria_id:iMercId, mercadoria_nome:iMerc?iMerc.nome:'',
+      peso_unitario:iPeso, quantidade:iQtd, quantidade_kg:iQtd*iPeso,
+      valor:iValor, data_pedido:dataPed, data_entrega:dataEnt,
+      bancas:iBancas||bancas, lotes:'A definir pela produção',
+      obs:iObs||obs, status:'Pendente'
+    };
+    var iRes = await POST('/api/pedidos', iPayload);
+    if(iRes) { DB.pedidos.unshift(iRes); totalItens++; }
+  }
+
+  // Limpar itens extras
+  itemExtraCount = 0;
+  var extrasEl = document.getElementById('itens-extras');
+  if(extrasEl) extrasEl.innerHTML = '';
+
+  toast('✓ Pedido criado com '+totalItens+' item(ns)!');
+  renderPedidos();
 }
 async function modalAtenderPedido(id) {
   window._atenderPedidoId = id;
@@ -2668,24 +2704,58 @@ function addItemExtra() {
   var div = document.createElement('div');
   div.id = 'item-extra-' + n;
   div.style.cssText = 'background:#0d1320;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;';
-  var frutas = ['LARANJA','PERA','LIMA TAITI','ABACATE','REPOLHO','CENOURA','MEXERICA POKAN'];
-  var frutaOpts = frutas.map(function(f){ return '<option>'+f+'</option>'; }).join('');
-  var mercOpts = DB.produtos.map(function(p){ return '<option value="'+p.id+'" data-peso="'+p.peso+'">'+p.nome+'</option>'; }).join('');
-  var bancaHTML = BANCAS_LISTA.map(function(b){
-    return '<label class="chk-lbl" style="padding:4px 7px;font-size:10px;"><input type="checkbox" value="'+b+'" class="item-banca-cb"> '+b+'</label>';
+
+  // Same fruta list as main form
+  var frutaOpts = (typeof FRUTAS !== 'undefined' ? FRUTAS : [
+    'LARANJA','LIMA TAITI','MEXERICA POKAN','LIMÃO','PERA','MAÇÃ',
+    'UVA','ABACATE','MAMÃO','MELANCIA','MELÃO','ABACAXI','CENOURA','REPOLHO'
+  ]).map(function(f){ return '<option>'+f+'</option>'; }).join('');
+
+  var mercOpts = DB.produtos.map(function(p){
+    return '<option value="'+p.id+'" data-peso="'+p.peso+'">'+p.codigo+' - '+p.nome+'</option>';
   }).join('');
-  div.innerHTML = '<div style="display:flex;justify-content:space-between;margin-bottom:8px;">'
-    + '<span style="font-size:11px;font-weight:700;color:var(--accent);">Item Extra '+n+'</span>'
-    + '<button class="btn btn-r btn-sm" onclick="removerItemExtra('+n+')">✕ Remover</button>'
-    + '</div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">'
-    + '<div><label class="lbl">Fruta</label><select class="inp item-fruta" onchange="atualizarBancaItem(this)">'+frutaOpts+'</select></div>'
-    + '<div><label class="lbl">Mercadoria</label><select class="inp item-merc">'+mercOpts+'</select></div>'
-    + '<div><label class="lbl">Quantidade</label><input type="number" class="inp item-qtd" placeholder="0" min="1"></div>'
-    + '</div>'
-    + '<div><label class="lbl item-banca-label-'+n+'">Bancas de Destino</label>'
-    + '<div class="chk-grid item-bancas-grid-'+n+'" style="margin-top:4px;">'+bancaHTML+'</div></div>';
+
+  var bancaHTML = (typeof BANCAS_LISTA !== 'undefined' ? BANCAS_LISTA :
+    ['BANCA 1','BANCA 2','BANCA 3','BANCA 4','BANCA 5','BANCA 6','INDUSTRIA']
+  ).map(function(b){
+    return '<label class="chk-lbl" style="padding:4px 7px;font-size:10px;"><input type="checkbox" value="'+b+'" class="item-banca-cb-'+n+'"> '+b+'</label>';
+  }).join('');
+
+  div.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+    +'<span style="font-size:12px;font-weight:700;color:var(--accent);">➕ Item '+n+'</span>'
+    +'<button class="btn btn-r btn-sm" onclick="removerItemExtra('+n+')">✕ Remover</button>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">'
+    +'<div><label class="lbl">Fruta *</label><select class="inp item-fruta-'+n+'" onchange="atualizarBancaItemN(this,'+n+')">'
+    +'<option value="">Selecione</option>'+frutaOpts+'</select></div>'
+    +'<div><label class="lbl">Mercadoria *</label><select class="inp item-merc-'+n+'">'
+    +'<option value="">Selecione</option>'+mercOpts+'</select></div>'
+    +'<div><label class="lbl">Qtd (cx) *</label><input type="number" class="inp item-qtd-'+n+'" placeholder="0" min="1"></div>'
+    +'<div><label class="lbl">Valor/cx (R$)</label><input type="number" class="inp item-valor-'+n+'" step="0.01" placeholder="0,00"></div>'
+    +'<div><label class="lbl">Obs</label><input type="text" class="inp item-obs-'+n+'" placeholder="Opcional"></div>'
+    +'</div>'
+    +'<div><label class="lbl item-banca-label-'+n+'">Bancas / Calibre *</label>'
+    +'<div class="chk-grid" style="margin-top:4px;" id="item-bancas-'+n+'">'+bancaHTML+'</div></div>';
+
   document.getElementById('itens-extras').appendChild(div);
+}
+
+function atualizarBancaItemN(sel, n) {
+  var fruta = sel.value.toUpperCase();
+  var citricos = ['LARANJA','LIMA TAITI','LIMÃO','MEXERICA','MEXERICA POKAN','TANGERINA'];
+  var ehCitrico = citricos.some(function(c){ return fruta.includes(c); });
+  var labelEl = document.getElementById('item-bancas-'+n) ?
+    document.getElementById('item-bancas-'+n).previousElementSibling : null;
+  if(labelEl) labelEl.textContent = ehCitrico ? 'Bancas de Destino *' : 'Calibre *';
+  var grid = document.getElementById('item-bancas-'+n);
+  if(!grid) return;
+  var opts = ehCitrico
+    ? ['BANCA 1','BANCA 2','BANCA 3','BANCA 4','BANCA 5','BANCA 6','INDUSTRIA']
+    : ['2A','2B','3A','3B','4A','4B'];
+  grid.innerHTML = opts.map(function(b){
+    return '<label class="chk-lbl" style="padding:4px 7px;font-size:10px;"><input type="checkbox" value="'+b+'" class="item-banca-cb-'+n+'"> '+b+'</label>';
+  }).join('');
 }
 
 // ═══════════════════════════════════════════════════════
@@ -3127,13 +3197,9 @@ function renderPedidosFiltrado() {
       +'<button class="btn btn-r btn-sm" data-pid="'+p.id+'" onclick="delPedido(this.dataset.pid)"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button>'
       +'</td></tr>';
   }).join('');
-  // Find the tbody element and replace its innerHTML (only the rows, not the thead)
-  var tbl = document.getElementById('ped-tabela');
-  if(tbl) {
-    var thead = tbl.querySelector('thead');
-    tbl.innerHTML = '';
-    if(thead) tbl.appendChild(thead);
-    tbl.innerHTML += rows || '<tr><td colspan="8" class="empty">Nenhum pedido encontrado</td></tr>';
+  // Update only tbody, preserve thead
+  if(tbody) {
+    tbody.innerHTML = rows || '<tr><td colspan="8" class="empty">Nenhum pedido encontrado</td></tr>';
     lucide.createIcons();
   }
 }
