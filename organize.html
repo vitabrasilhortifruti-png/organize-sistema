@@ -1291,83 +1291,94 @@ function atualizarBancasCalibres() {
 }
 
 function renderPedidos() {
-  document.getElementById('content').innerHTML=`
-  <div class="card" style="margin-bottom:16px;">
-    <div class="section-title"><i data-lucide="plus" style="width:16px;height:16px;"></i> Novo Pedido</div>
-    <div class="frow">
-      <div><label class="lbl">Cliente *</label><select class="inp" id="ped-cli"><option value="">Selecione</option>${DB.clientes.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')}</select></div>
-      <div><label class="lbl">Fruta *</label><select class="inp" id="ped-fruta" onchange="atualizarBancasCalibres()"><option value="">Selecione</option>${FRUTAS.map(f=>`<option>${f}</option>`).join('')}</select></div>
-      <div><label class="lbl">Mercadoria *</label><select class="inp" id="ped-merc" ><option value="">Selecione</option>${DB.produtos.map(p=>`<option value="${p.id}" data-peso="${p.peso}">${p.codigo} - ${p.nome}</option>`).join('')}</select></div>
-      <div><label class="lbl">Data Pedido *</label><input class="inp" id="ped-data-ped" type="date" value="${today()}"></div>
-      <div><label class="lbl">Data Entrega *</label><input class="inp" id="ped-data-ent" type="date" value="${tomorrow()}"></div>
-      <div><label class="lbl">Quantidade *</label><input class="inp" id="ped-qtd" type="number" step="1" placeholder="0" oninput="atualizarLotesPed()"></div>
-      <div><label class="lbl">Valor unit. (R$)</label><input class="inp" id="ped-valor" type="number" step="0.01" placeholder="0,00"></div>
-    </div>
-    <div style="margin-bottom:12px;" id="bancas-section">
-      <label class="lbl" id="bancas-label">Bancas de Destino</label>
-      <div class="chk-grid" id="bancas-chk">
-        ${['BANCA 1','BANCA 2','BANCA 3','BANCA 4','BANCA 5','BANCA 6','INDUSTRIA'].map(b=>`<label class="chk-lbl"><input type="checkbox" value="${b}" class="banca-cb"> ${b}</label>`).join('')}
-      </div>
-    </div>
-    <div style="margin-bottom:10px;padding:10px;background:rgba(249,115,22,.07);border-radius:8px;font-size:12px;color:var(--accent);">
-      ℹ️ A seleção de lotes é feita pela <strong>Produção</strong> na hora de atender o pedido.<br>
-      <span style="font-size:11px;color:var(--sub);">🍊 Laranja, Limão e Mexerica = <strong>Banca</strong> &nbsp;|&nbsp; Demais frutas = <strong>Calibre</strong> (2A, 2B, 3A, 3B, 4A, 4B)</span>
-    </div>
-    <div style="margin-bottom:10px;"><label class="lbl">Observações</label><input class="inp" id="ped-obs" placeholder="Observações"></div>
+  var frutaOpts = (typeof FRUTAS!=='undefined'?FRUTAS:[]).map(function(f){return `<option>${f}</option>`;}).join('');
+  var cliOpts = DB.clientes.map(function(c){return `<option value="${c.id}">${c.nome}</option>`;}).join('');
+  var mercOpts = DB.produtos.map(function(p){return `<option value="${p.id}" data-peso="${p.peso}">${p.codigo} - ${p.nome}</option>`;}).join('');
+  var bancasHtml = (typeof BANCAS_LISTA!=='undefined'?BANCAS_LISTA:[]).map(function(b){return `<label class="chk-lbl"><input type="checkbox" value="${b}" class="banca-cb"> ${b}</label>`;}).join('');
 
-    <!-- MÚLTIPLOS ITENS -->
-    <div style="margin-bottom:12px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <label class="lbl" style="margin:0;">Itens adicionais (opcional)</label>
-        <button class="btn btn-s btn-sm" onclick="addItemExtra()">+ Novo Item</button>
-      </div>
-      <div id="itens-extras"></div>
-    </div>
+  document.getElementById('content').innerHTML =
+    '<div class="card" style="margin-bottom:16px;">'
+    +'<div class="section-title"><i data-lucide="plus" style="width:16px;height:16px;"></i> Novo Pedido</div>'
+    +'<div class="frow">'
+    +'<div><label class="lbl">Cliente *</label><select class="inp" id="ped-cli"><option value="">Selecione</option>'+cliOpts+'</select></div>'
+    +'<div><label class="lbl">Fruta *</label><select class="inp" id="ped-fruta" onchange="atualizarBancasCalibres()"><option value="">Selecione</option>'+frutaOpts+'</select></div>'
+    +'<div><label class="lbl">Mercadoria *</label><select class="inp" id="ped-merc"><option value="">Selecione</option>'+mercOpts+'</select></div>'
+    +'<div><label class="lbl">Data Pedido *</label><input class="inp" id="ped-data-ped" type="date" value="'+today()+'"></div>'
+    +'<div><label class="lbl">Data Entrega *</label><input class="inp" id="ped-data-ent" type="date" value="'+tomorrow()+'"></div>'
+    +'<div><label class="lbl">Quantidade *</label><input class="inp" id="ped-qtd" type="number" step="1" placeholder="0" oninput="atualizarLotesPed()"></div>'
+    +'<div><label class="lbl">Valor unit. (R$)</label><input class="inp" id="ped-valor" type="number" step="0.01" placeholder="0,00"></div>'
+    +'</div>'
+    +'<div style="margin-bottom:12px;" id="bancas-section">'
+    +'<label class="lbl" id="bancas-label">Bancas de Destino</label>'
+    +'<div class="chk-grid" id="bancas-chk">'+bancasHtml+'</div>'
+    +'</div>'
+    +'<div style="margin-bottom:10px;padding:10px;background:rgba(249,115,22,.07);border-radius:8px;font-size:12px;color:var(--accent);">'
+    +'ℹ️ A seleção de lotes é feita pela <strong>Produção</strong> na hora de atender o pedido.<br>'
+    +'<span style="font-size:11px;color:var(--sub);">🍊 Laranja, Limão e Mexerica = <strong>Banca</strong> &nbsp;|&nbsp; Demais frutas = <strong>Calibre</strong> (2A, 2B, 3A, 3B, 4A, 4B)</span>'
+    +'</div>'
+    +'<div style="margin-bottom:12px;"><label class="lbl">Obs</label><input class="inp" id="ped-obs" placeholder="Observações"></div>'
+    +'<div style="margin-bottom:12px;">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+    +'<label class="lbl" style="margin:0;">Itens adicionais (opcional)</label>'
+    +'<button class="btn btn-s btn-sm" onclick="addItemExtra()">+ Novo Item</button>'
+    +'</div>'
+    +'<div id="itens-extras"></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button class="btn btn-p" onclick="addPedido()"><i data-lucide="plus" style="width:13px;height:13px;"></i> Criar Pedido</button>'
+    +'<button class="btn btn-s" onclick="limparFormPedido()">🗑 Limpar</button>'
+    +'</div>'
+    +'</div>'
 
-    <div style="display:flex;gap:8px;"><button class="btn btn-p" onclick="addPedido()"><i data-lucide="plus" style="width:13px;height:13px;"></i> Criar Pedido</button><button class="btn btn-s" onclick="limparForm(['ped-qtd','ped-valor','ped-obs'])">🗑 Limpar</button></div>
-  </div>
-  <div class="card">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-      <div class="section-title" style="margin:0;flex:1;"><i data-lucide="clipboard-list" style="width:16px;height:16px;"></i> Pedidos (<span id="ped-count">${DB.pedidos.length}</span>)</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-        <input class="inp" id="ped-search" placeholder="🔍 Buscar cliente..." style="max-width:160px;" oninput="renderPedidosFiltrado()">
-        <label style="font-size:10px;color:var(--sub);">Pedido:</label>
-        <input class="inp" id="ped-f-ini" type="date" style="max-width:130px;" oninput="renderPedidosFiltrado()">
-        <label style="font-size:10px;color:var(--sub);">até</label>
-        <input class="inp" id="ped-f-fim" type="date" style="max-width:130px;" oninput="renderPedidosFiltrado()">
-        <label style="font-size:10px;color:var(--sub);">Entrega:</label>
-        <input class="inp" id="ped-f-ent" type="date" style="max-width:130px;" oninput="renderPedidosFiltrado()">
-        <select class="inp" id="ped-f-status" style="max-width:130px;" onchange="renderPedidosFiltrado()">
-          <option value="">Todos os status</option>
-          <option value="Pendente">Pendente</option>
-          <option value="Atendido">Atendido</option>
-        </select>
-        <button class="btn btn-s btn-sm" onclick="limparFiltrosPedidos()">✕ Limpar</button>
-        <button class="btn btn-p btn-sm" onclick="imprimirPedidosFiltrados()">🖨️ Imprimir</button>
-        <button class="btn btn-g btn-sm" onclick="imprimirRelatorioProducao()">📋 Produção</button>
-      </div>
-    </div>
-    <div class="tbl-wrap"><table class="tbl" id="ped-tabela"><thead><tr><th>Cliente</th><th>Fruta</th><th>Qtd (cx)</th><th>Peso Total</th><th>Valor</th><th>Entrega</th><th>Status</th><th>Ações</th></tr></thead><tbody id="ped-tbody">
-    ${getPedidosFiltrados().map(p=>`<tr>
-      <td style="color:var(--text);font-weight:600">${p.cliente_nome}</td>
-      <td>${p.fruta}</td>
-      <td>${p.quantidade} cx</td>
-      <td><strong style="color:var(--accent)">${(p.quantidade_kg||0).toFixed(0)} kg</strong></td>
-      <td>${fmtMoney((p.valor||0)*p.quantidade)}</td>
-      <td>${fmtDate(p.data_entrega)}</td>
-      <td><span class="badge ${p.status==='Atendido'?'bg':p.status==='Pendente'?'by':'bo'}">${p.status}</span></td>
-      <td style="display:flex;gap:4px;flex-wrap:wrap;">
-        ${p.status==='Pendente'?`<button class="btn btn-g btn-sm" onclick="modalAtenderPedido('${p.id}')">✓ Atender</button>`:''}
-        <button class="btn btn-s btn-sm" onclick="modalVerPedido('${p.id}')" title="Ver detalhes">👁️</button>
-        <button class="btn btn-s btn-sm" onclick="modalEditarPedido('${p.id}')" title="Editar">✏️</button>
-        <button class="btn btn-s btn-sm" onclick="imprimirPedido('${p.id}')" title="Imprimir">🖨️</button>
-        <button class="btn btn-r btn-sm" onclick="delPedido('${p.id}')"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button>
-      </td>
-    </tr>`).join('')||'<tr><td colspan="7" class="empty">Nenhum pedido</td></tr>'}
-    </tbody></table></div>
-  </div>`;
+    // ── TABELA DE PEDIDOS ────────────────────────────────
+    +'<div class="card">'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">'
+    +'<div class="section-title" style="margin:0;">Pedidos (<span id="ped-count">'+DB.pedidos.length+'</span>)</div>'
+    +'<input class="inp" id="ped-search" placeholder="🔍 Buscar cliente..." style="max-width:150px;" oninput="filtrarPedidosPorNome()">'
+    +'<label style="font-size:10px;color:var(--sub);">De:</label>'
+    +'<input class="inp" id="ped-f-ini" type="date" style="max-width:130px;" oninput="renderPedidosFiltrado()">'
+    +'<label style="font-size:10px;color:var(--sub);">Até:</label>'
+    +'<input class="inp" id="ped-f-fim" type="date" style="max-width:130px;" oninput="renderPedidosFiltrado()">'
+    +'<label style="font-size:10px;color:var(--sub);">Entrega:</label>'
+    +'<input class="inp" id="ped-f-ent" type="date" style="max-width:130px;" oninput="renderPedidosFiltrado()">'
+    +'<select class="inp" id="ped-f-status" style="max-width:120px;" onchange="renderPedidosFiltrado()">'
+    +'<option value="">Todos status</option>'
+    +'<option>Pendente</option><option>Atendido</option>'
+    +'</select>'
+    +'<button class="btn btn-s btn-sm" onclick="limparFiltrosPedidos()">✕</button>'
+    +'<button class="btn btn-s btn-sm" onclick="imprimirPedidosFiltrados()">🖨️ Imprimir</button>'
+    +'<button class="btn btn-p btn-sm" onclick="imprimirPedidosPendentes()">📋 Produção</button>'
+    +'</div>'
+    +'<div class="tbl-wrap"><table class="tbl" id="ped-tabela">'
+    +'<thead><tr><th>Cliente</th><th>Fruta</th><th>Qtd</th><th>KG</th><th>Valor</th><th>Entrega</th><th>Status</th><th>Ações</th></tr></thead>'
+    +'<tbody id="ped-tbody"><tr><td colspan="8" class="empty">Carregando...</td></tr></tbody>'
+    +'</table></div>'
+    +'</div>';
+
   lucide.createIcons();
+  renderPedidosFiltrado();
 }
+
+function limparFormPedido() {
+  ['ped-qtd','ped-valor','ped-obs','ped-cli','ped-fruta','ped-merc'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.value='';
+  });
+  document.querySelectorAll('.banca-cb').forEach(function(cb){cb.checked=false;});
+  var ext=document.getElementById('itens-extras'); if(ext) ext.innerHTML='';
+  itemExtraCount=0;
+}
+
+function filtrarPedidosPorNome() {
+  var search = ((document.getElementById('ped-search')||{}).value||'').toLowerCase().trim();
+  document.querySelectorAll('#ped-tbody tr[data-nome]').forEach(function(row){
+    row.style.display = (!search || row.dataset.nome.includes(search)) ? '' : 'none';
+  });
+  // Update count
+  var visible = document.querySelectorAll('#ped-tbody tr[data-nome]:not([style*="none"])').length;
+  var el = document.getElementById('ped-count');
+  if(el) el.textContent = visible;
+}
+
 function atualizarLotesPed() {
   const fruta=document.getElementById('ped-fruta').value;
   const mercEl=document.getElementById('ped-merc');
