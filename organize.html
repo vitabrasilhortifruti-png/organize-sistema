@@ -3221,7 +3221,7 @@ function renderPedidosFiltrado() {
       +'<td style="display:flex;gap:4px;flex-wrap:wrap;">'
       +(g.status==='Pendente'?'<button class="btn btn-g btn-sm" data-chave="'+g.chave+'" onclick="modalAtenderGrupo(this.dataset.chave)">✓ Atender</button>':'')
       +'<button class="btn btn-s btn-sm" data-chave="'+g.chave+'" onclick="modalVerGrupo(this.dataset.chave)">👁️</button>'
-      +'<button class="btn btn-s btn-sm" data-pid="'+g.primeiroId+'" onclick="imprimirPedido(this.dataset.pid)">🖨️</button>'
+      +'<button class="btn btn-s btn-sm" data-chave="'+g.chave+'" onclick="imprimirGrupoPedido(this.dataset.chave)">🖨️</button>'
       +'<button class="btn btn-r btn-sm" data-chave="'+g.chave+'" onclick="delGrupoPedido(this.dataset.chave)"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button>'
       +'</td></tr>';
   }).join('');
@@ -4136,7 +4136,7 @@ function modalVerGrupo(chave) {
     // Botões
     +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
     +(statusGeral==='Pendente'?'<button class="btn btn-g" data-chave="'+chave+'" onclick="closeModal();modalAtenderGrupo(this.dataset.chave)">✓ Atender</button>':'')
-    +'<button class="btn btn-p btn-sm" data-pid="'+g.id+'" onclick="imprimirPedido(this.dataset.pid)">🖨️ Imprimir</button>'
+    +'<button class="btn btn-p btn-sm" data-chave="'+chave+'" onclick="imprimirGrupoPedido(this.dataset.chave)">🖨️ Imprimir</button>'
     +'<button class="btn btn-r btn-sm" data-chave="'+chave+'" onclick="closeModal();delGrupoPedido(this.dataset.chave)">🗑️ Excluir</button>'
     +'<button class="btn btn-s" onclick="closeModal()">Fechar</button>'
     +'</div>'
@@ -4160,6 +4160,113 @@ async function delGrupoPedido(chave) {
   toast('✅ Pedido excluído!');
   await loadAllData();
   renderPedidos();
+}
+
+
+function imprimirGrupoPedido(chave) {
+  var itens = DB.pedidos.filter(function(p){ return (p.numero_pedido||p.id)===chave; });
+  if(!itens.length) return;
+  var g = itens[0];
+  var cli = DB.clientes.find(function(c){return c.id===g.cliente_id;});
+  var emp = DB.empresa || {};
+  var empNome = emp.nome || 'Organize';
+  var totalCx=0, totalKg=0, totalValor=0;
+  itens.forEach(function(i){ totalCx+=i.quantidade; totalKg+=(i.quantidade_kg||0); totalValor+=(i.valor||0)*i.quantidade; });
+  var pal = Math.ceil(totalCx/30);
+  var statusGeral = itens.every(function(i){return i.status==='Atendido';}) ? 'Atendido' : 'Pendente';
+
+  var linhasItens = itens.map(function(i, idx){
+    return '<tr>'
+      +'<td style="font-weight:700;color:#f97316;">'+(idx+1)+'</td>'
+      +'<td style="font-weight:700;">'+i.fruta+'</td>'
+      +'<td>'+(i.mercadoria_nome||'-')+'</td>'
+      +'<td style="text-align:center;font-weight:700;">'+i.quantidade+' cx</td>'
+      +'<td style="text-align:center;">'+(i.quantidade_kg||0).toFixed(0)+' kg</td>'
+      +'<td>'+(i.bancas||'-')+'</td>'
+      +'<td><span style="background:'+(i.status==='Atendido'?'#d1fae5':'#fef3c7')+';color:'+(i.status==='Atendido'?'#065f46':'#92400e')+';padding:2px 6px;border-radius:8px;font-size:9px;font-weight:700;">'+i.status+'</span></td>'
+      +'</tr>';
+  }).join('');
+
+  var win = window.open('', '_blank', 'width=850,height=650');
+  win.document.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Pedido</title>'
+    +'<style>*{box-sizing:border-box;margin:0;padding:0;}'
+    +'body{font-family:Arial,sans-serif;font-size:11px;color:#111;padding:16px;background:#fff;}'
+    +'.cab{display:flex;align-items:center;gap:10px;border-bottom:2px solid #f97316;padding-bottom:8px;margin-bottom:14px;}'
+    +'.cab-logo{width:36px;height:36px;background:#f97316;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:900;flex-shrink:0;}'
+    +'.cab-nome{font-size:12px;font-weight:700;color:#333;}'
+    +'.cab-titulo{font-size:12px;font-weight:700;color:#f97316;}'
+    +'.cab-data{margin-left:auto;font-size:10px;color:#999;text-align:right;}'
+    +'.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;}'
+    +'.card{border:1px solid #eee;border-radius:6px;padding:8px;text-align:center;}'
+    +'.cl{font-size:9px;color:#888;text-transform:uppercase;}'
+    +'.cv{font-size:18px;font-weight:800;color:#f97316;}'
+    +'.info{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;}'
+    +'.info-box{background:#f9f9f9;border-radius:6px;padding:8px;}'
+    +'.info-label{font-size:9px;color:#888;text-transform:uppercase;}'
+    +'.info-val{font-size:12px;font-weight:700;color:#111;margin-top:3px;}'
+    +'table{width:100%;border-collapse:collapse;margin-bottom:12px;}'
+    +'th{background:#f97316;color:#fff;padding:6px 8px;text-align:left;font-size:10px;}'
+    +'td{padding:6px 8px;border-bottom:1px solid #eee;font-size:10px;}'
+    +'tr:nth-child(even) td{background:#fafafa;}'
+    +'.total-row td{font-weight:700;background:#fff3e0;border-top:2px solid #f97316;}'
+    +'.assin{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:12px;}'
+    +'.assin-box{border:1px dashed #ccc;border-radius:4px;padding:10px;font-size:10px;color:#888;}'
+    +'.assin-line{border-top:1px solid #ccc;margin-top:16px;padding-top:3px;font-size:9px;}'
+    +'.rod{margin-top:14px;padding-top:8px;border-top:1px solid #eee;font-size:12px;color:#666;text-align:center;}'
+    +'.np{margin-top:12px;display:flex;gap:8px;}@media print{.np{display:none!important;}}'
+    +'</style></head><body>'
+
+    // Cabeçalho
+    +'<div class="cab">'
+    +(emp.logo?'<img src="'+emp.logo+'" style="width:36px;height:36px;object-fit:contain;border-radius:6px;">':'<div class="cab-logo">'+empNome.charAt(0)+'</div>')
+    +'<div><div class="cab-nome">'+empNome+'</div><div class="cab-titulo">📋 Ordem de Pedido</div></div>'
+    +'<div class="cab-data">'+new Date().toLocaleString('pt-BR')+'</div>'
+    +'</div>'
+
+    // Cards resumo
+    +'<div class="cards">'
+    +'<div class="card"><div class="cl">Total Caixas</div><div class="cv">'+totalCx+'</div></div>'
+    +'<div class="card"><div class="cl">Total KG</div><div class="cv">'+totalKg.toFixed(0)+' kg</div></div>'
+    +'<div class="card"><div class="cl">Paletes</div><div class="cv" style="color:#7c3aed;">'+pal+'</div></div>'
+    +'<div class="card"><div class="cl">Status</div><div class="cv" style="font-size:12px;"><span style="background:'+(statusGeral==='Atendido'?'#d1fae5':'#fef3c7')+';color:'+(statusGeral==='Atendido'?'#065f46':'#92400e')+';padding:3px 8px;border-radius:10px;font-size:11px;">'+statusGeral+'</span></div></div>'
+    +'</div>'
+
+    // Info cliente / datas
+    +'<div class="info">'
+    +'<div class="info-box"><div class="info-label">Cliente</div><div class="info-val">'+g.cliente_nome+'</div>'
+    +(cli&&cli.contato?'<div style="font-size:10px;color:#666;margin-top:3px;">'+cli.contato+'</div>':'')
+    +'</div>'
+    +'<div class="info-box"><div class="info-label">Datas</div>'
+    +'<div style="display:flex;gap:16px;margin-top:3px;">'
+    +'<div><div style="font-size:9px;color:#888;">Pedido</div><div style="font-weight:700;">'+new Date(g.data_pedido+'T12:00:00').toLocaleDateString('pt-BR')+'</div></div>'
+    +'<div><div style="font-size:9px;color:#888;">Entrega</div><div style="font-weight:700;color:#f97316;font-size:13px;">'+new Date(g.data_entrega+'T12:00:00').toLocaleDateString('pt-BR')+'</div></div>'
+    +'</div></div>'
+    +'</div>'
+
+    // Tabela de itens
+    +'<table><thead><tr><th>#</th><th>Fruta</th><th>Embalagem</th><th style="text-align:center">Caixas</th><th style="text-align:center">KG</th><th>Banca/Calibre</th><th>Status</th></tr></thead><tbody>'
+    +linhasItens
+    +'<tr class="total-row"><td colspan="3">TOTAL</td><td style="text-align:center;">'+totalCx+' cx</td><td style="text-align:center;">'+totalKg.toFixed(0)+' kg</td><td colspan="2">'+pal+' pal</td></tr>'
+    +'</tbody></table>'
+
+    // Assinaturas
+    +'<div class="assin">'
+    +'<div class="assin-box">Responsável:<div class="assin-line">_____________________</div></div>'
+    +'<div class="assin-box">Conferente:<div class="assin-line">_____________________</div></div>'
+    +'<div class="assin-box">Data: ___/___/______<div class="assin-line">Assinatura</div></div>'
+    +'</div>'
+
+    // Rodapé
+    +'<div class="rod">'
+    +(emp.endereco?'📍 '+emp.endereco+'  ':'')+( emp.telefone?'📞 '+emp.telefone+'  ':'')+(emp.email?'✉️ '+emp.email:'')
+    +'</div>'
+
+    +'<div class="np">'
+    +'<button onclick="window.print()" style="background:#f97316;color:#fff;border:none;padding:8px 16px;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer;">🖨️ Imprimir</button>'
+    +'<button onclick="window.print()" style="background:#10b981;color:#fff;border:none;padding:8px 16px;border-radius:5px;font-size:12px;cursor:pointer;">📄 PDF</button>'
+    +'<button onclick="window.close()" style="background:#eee;color:#333;border:none;padding:8px 16px;border-radius:5px;font-size:12px;cursor:pointer;">✕ Fechar</button>'
+    +'</div></body></html>');
+  win.document.close();
 }
 
 </script>
