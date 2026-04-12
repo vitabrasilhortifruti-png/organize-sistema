@@ -1820,20 +1820,35 @@ async function delPedido(id) {
 // ROMANEIO
 // ═══════════════════════════════════════════════════════
 function renderRomaneio() {
-  // Pedidos que já estão em QUALQUER romaneio (exceto os entregues que foram reabertos)
+  // Pedidos que já estão em algum romaneio
   var pedIdsEmCarga = new Set();
   (DB.romaneios || []).forEach(function(r){
-    var ids = (r.pedido_id||'').split(',');
-    ids.forEach(function(id){
-      var trimId = id.trim();
-      if(trimId) pedIdsEmCarga.add(trimId);
+    (r.pedido_id||'').split(',').forEach(function(id){
+      var t = id.trim(); if(t) pedIdsEmCarga.add(t);
     });
   });
 
-  // Pedidos atendidos que NÃO estão em nenhum romaneio ativo
-  var pedsLivres = (DB.pedidos || []).filter(function(p){
+  // Pedidos atendidos que NÃO estão em nenhum romaneio
+  var pedsAtendLivres = (DB.pedidos || []).filter(function(p){
     return p.status === 'Atendido' && !pedIdsEmCarga.has(p.id);
   });
+
+  // Agrupar por numero_pedido para mostrar como um grupo na seleção
+  var gruposLivres = {};
+  pedsAtendLivres.forEach(function(p){
+    var chave = p.numero_pedido || p.id;
+    if(!gruposLivres[chave]) {
+      gruposLivres[chave] = {
+        chave: chave, cliente_nome: p.cliente_nome, data_entrega: p.data_entrega,
+        itens: [], totalCx: 0, totalKg: 0, ids: []
+      };
+    }
+    gruposLivres[chave].itens.push(p);
+    gruposLivres[chave].totalCx += p.quantidade;
+    gruposLivres[chave].totalKg += (p.quantidade_kg||0);
+    gruposLivres[chave].ids.push(p.id);
+  });
+  var pedsLivres = Object.values(gruposLivres);
 
   // Cargas em andamento (Em Aberto ou Carregado)
   var cargasAbertas = DB.romaneios.filter(function(r){
@@ -1977,8 +1992,12 @@ async function gerarRomaneioMulti() {
   var numRom = 'ROM-'+Date.now().toString(36).toUpperCase();
   var pedsSel = [];
   cbs.forEach(function(cb){
-    var p = DB.pedidos.find(function(x){return x.id===cb.value;});
-    if(p) pedsSel.push(p);
+    // value can be comma-separated ids for grouped pedidos
+    var ids = cb.value.split(',');
+    ids.forEach(function(id){
+      var p = DB.pedidos.find(function(x){return x.id===id.trim();});
+      if(p) pedsSel.push(p);
+    });
   });
   if(pedsSel.length===0) return toast('Nenhum pedido válido selecionado','err');
   var totalCx = pedsSel.reduce(function(s,p){return s+p.quantidade;},0);
@@ -3909,8 +3928,15 @@ function atualizarResumoRom() {
   var cbs = document.querySelectorAll('.rom-ped-cb:checked');
   var totalCx=0,totalKg=0,totalPal=0;
   cbs.forEach(function(cb){
-    var p=DB.pedidos.find(function(x){return x.id===cb.value;});
-    if(p){totalCx+=p.quantidade;totalKg+=(p.quantidade_kg||0);totalPal+=Math.ceil(p.quantidade/30);}
+    // value can be comma-separated ids for grouped pedidos
+    var cx = parseInt(cb.dataset.cx)||0;
+    var kg = parseFloat(cb.dataset.kg)||0;
+    if(cx > 0) { totalCx+=cx; totalKg+=kg; totalPal+=Math.ceil(cx/30); }
+    else {
+      // fallback for single pedido
+      var p=DB.pedidos.find(function(x){return x.id===cb.value;});
+      if(p){totalCx+=p.quantidade;totalKg+=(p.quantidade_kg||0);totalPal+=Math.ceil(p.quantidade/30);}
+    }
   });
   var el=document.getElementById('rom-resumo');
   if(!el) return;
