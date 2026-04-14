@@ -1203,7 +1203,7 @@ function imprimirPedidosFiltrados() {
     +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Pedidos</div><div style="font-size:16px;font-weight:800;color:#f97316;">'+peds.length+'</div></div>'
     +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Total Caixas</div><div style="font-size:16px;font-weight:800;color:#f97316;">'+totalCx+' cx</div></div>'
     +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Total KG</div><div style="font-size:16px;font-weight:800;color:#10b981;">'+totalKg.toFixed(0)+' kg</div></div>'
-    +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Paletes</div><div style="font-size:16px;font-weight:800;color:#7c3aed;">'+fmtPaletes(totalPal*30)+'</div></div>'
+    +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Paletes</div><div style="font-size:16px;font-weight:800;color:#7c3aed;">'+fmtPaletes(totalCx)+'</div></div>'
     +'</div>'
     +'<table><thead><tr><th>Cliente</th><th>Fruta</th><th>Produto/Embal.</th><th style="text-align:center">Caixas</th><th style="text-align:center">KG Total</th><th style="text-align:center">Paletes</th><th>Data Pedido</th><th>Entrega</th><th>Status</th></tr></thead><tbody>'
     +peds.map(function(p){
@@ -1233,7 +1233,7 @@ function imprimirPedidosPendentes() {
     +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Pendentes</div><div style="font-size:18px;font-weight:800;color:#f97316;">'+peds.length+'</div></div>'
     +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Total Caixas</div><div style="font-size:18px;font-weight:800;">'+totalCx+' cx</div></div>'
     +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Total KG</div><div style="font-size:18px;font-weight:800;color:#10b981;">'+totalKg.toFixed(0)+' kg</div></div>'
-    +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Paletes</div><div style="font-size:18px;font-weight:800;color:#7c3aed;">'+fmtPaletes(totalPal*30)+'</div></div>'
+    +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Paletes</div><div style="font-size:18px;font-weight:800;color:#7c3aed;">'+fmtPaletes(totalCx)+'</div></div>'
     +'</div>'
     +(peds.length===0
       ? '<p style="text-align:center;color:#10b981;padding:20px;font-size:14px;">✅ Nenhum pedido pendente!</p>'
@@ -2133,7 +2133,7 @@ function imprimirMapaCarga() {
     +'<div class="rcard"><div class="rl">Pedidos</div><div class="rv">'+peds.length+'</div></div>'
     +'<div class="rcard"><div class="rl">Total Caixas</div><div class="rv">'+totalCx+' cx</div></div>'
     +'<div class="rcard"><div class="rl">Total Peso</div><div class="rv">'+totalKg.toFixed(0)+' kg</div></div>'
-    +'<div class="rcard destaque"><div class="rl">Total Paletes</div><div class="rv pal">'+fmtPaletes(totalPal*30)+'</div></div>'
+    +'<div class="rcard destaque"><div class="rl">Total Paletes</div><div class="rv pal">'+fmtPaletes(totalCx)+'</div></div>'
     +'<div class="rcard"><div class="rl">Cxs/Palete</div><div class="rv" style="font-size:14px;">30 cx</div></div>'
     +'</div>'
     +'<table><thead><tr>'
@@ -3395,7 +3395,7 @@ function imprimirRelatorioProducao() {
     +'<div class="ri"><div class="rl">Pedidos</div><div class="rv">'+peds.length+'</div></div>'
     +'<div class="ri"><div class="rl">Total Caixas</div><div class="rv">'+totalCx+'</div></div>'
     +'<div class="ri"><div class="rl">Total KG</div><div class="rv">'+totalKg.toFixed(0)+' kg</div></div>'
-    +'<div class="ri"><div class="rl">Paletes</div><div class="rv">'+fmtPaletes(totalPal*30)+'</div></div>'
+    +'<div class="ri"><div class="rl">Paletes</div><div class="rv">'+fmtPaletes(totalCx)+'</div></div>'
     +'</div>'
     +(peds.length===0
       ? '<p style="text-align:center;color:green;padding:20px;">✅ Nenhum pedido pendente!</p>'
@@ -4027,7 +4027,7 @@ function atualizarResumoRom() {
     +'<div><div style="font-size:9px;color:var(--muted)">PEDIDOS</div><div style="font-size:16px;font-weight:800;color:var(--text)">'+cbs.length+'</div></div>'
     +'<div><div style="font-size:9px;color:var(--muted)">CAIXAS</div><div style="font-size:16px;font-weight:800;color:var(--accent)">'+totalCx+'</div></div>'
     +'<div><div style="font-size:9px;color:var(--muted)">KG</div><div style="font-size:16px;font-weight:800;color:var(--green)">'+totalKg.toFixed(0)+' kg</div></div>'
-    +'<div><div style="font-size:9px;color:var(--muted)">PALETES</div><div style="font-size:16px;font-weight:800;color:var(--yellow)">'+fmtPaletes(totalPal*30)+'</div></div>'
+    +'<div><div style="font-size:9px;color:var(--muted)">PALETES</div><div style="font-size:16px;font-weight:800;color:var(--yellow)">'+fmtPaletes(totalCx)+'</div></div>'
     +'</div>';
 }
 
