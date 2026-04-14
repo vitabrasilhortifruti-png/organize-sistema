@@ -488,7 +488,7 @@ function goTo(page) {
   const renders = {
     dashboard:renderDashboard, empresa:renderEmpresa, produtos:renderProdutos,
     cadastros:renderCadastros, entrada:renderEntrada, pedidos:renderPedidos,
-    romaneio:renderRomaneio, vendas:renderVendas, caixas:renderCaixas,
+    romaneio:function(){loadAllData().then(renderRomaneio);}, vendas:renderVendas, caixas:renderCaixas,
     estoque:renderEstoque, financeiro:renderFinanceiro, relatorios:renderRelatorios,
     backup:renderBackupPage
   };
@@ -1705,92 +1705,111 @@ function qtd_total_text(cbs, peso) {
 }
 
 async function modalEditarPedido(id) {
+  // Find the pedido - if id is a grupo chave, get first item
   var p = DB.pedidos.find(function(x){return x.id===id;});
+  if(!p) {
+    // Maybe id is a numero_pedido/chave - get first item
+    p = DB.pedidos.find(function(x){return (x.numero_pedido||x.id)===id;});
+  }
   if(!p) return;
-  window._editPedidoId = id;
+
+  // Block editing if already attended
+  if(p.status === 'Atendido') {
+    toast('Pedido já atendido — não é possível editar','err');
+    return;
+  }
+
+  window._editPedidoId = p.id;
   var cliOpts = DB.clientes.map(function(c){
     return '<option value="'+c.id+'"'+(c.id===p.cliente_id?' selected':'')+'>'+c.nome+'</option>';
   }).join('');
-  var frutaOpts = ['LARANJA','PERA','LIMA TAITI','ABACATE','REPOLHO','CENOURA','MEXERICA POKAN'].map(function(f){
+  var mercOpts = DB.produtos.map(function(m){
+    return '<option value="'+m.id+'"'+(m.id===p.mercadoria_id?' selected':'')+' data-peso="'+m.peso+'">'+m.codigo+' — '+m.nome+'</option>';
+  }).join('');
+  var frutaOpts = FRUTAS.map(function(f){
     return '<option'+(f===p.fruta?' selected':'')+'>'+f+'</option>';
   }).join('');
-  var html = '<div class="section-title">✏️ Editar Pedido</div>'
-    + '<div class="frow" style="margin-bottom:10px;">'
-    + '<div><label class="lbl">Cliente</label><select class="inp" id="ep-cli">'+cliOpts+'</select></div>'
-    + '<div><label class="lbl">Fruta</label><select class="inp" id="ep-fruta">'+frutaOpts+'</select></div>'
-    + '<div><label class="lbl">Quantidade</label><input class="inp" id="ep-qtd" type="number" value="'+p.quantidade+'"></div>'
-    + '<div><label class="lbl">Valor unit. (R$)</label><input class="inp" id="ep-valor" type="number" step="0.01" value="'+(p.valor||0)+'"></div>'
-    + '<div><label class="lbl">Data Pedido</label><input class="inp" id="ep-data-ped" type="date" value="'+(p.data_pedido||'')+'"></div>'
-    + '<div><label class="lbl">Data Entrega</label><input class="inp" id="ep-data-ent" type="date" value="'+(p.data_entrega||'')+'"></div>'
-    + '</div>'
-    + '<div style="margin-bottom:10px;"><label class="lbl">Bancas</label><input class="inp" id="ep-bancas" value="'+(p.bancas||'')+'"></div>'
-    + '<div style="margin-bottom:14px;"><label class="lbl">Observações</label><input class="inp" id="ep-obs" value="'+(p.obs||'')+'"></div>'
-    + '<div style="display:flex;gap:8px;">'
-    + '<button class="btn btn-p" onclick="salvarEdicaoPedido()">💾 Salvar Alterações</button>'
-    + '<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
-    + '</div>';
-  modal(html);
+  var bancasHtml = (typeof BANCAS_LISTA!=='undefined'?BANCAS_LISTA:[]).map(function(b){
+    var checked = (p.bancas||'').indexOf(b)!==-1 ? ' checked' : '';
+    return '<label class="chk-lbl"><input type="checkbox" value="'+b+'" class="ep-banca-cb"'+checked+'> '+b+'</label>';
+  }).join('');
+
+  modal('<div class="section-title">✏️ Editar Pedido — '+p.cliente_nome+'</div>'
+    +'<div class="frow" style="margin-bottom:10px;">'
+    +'<div><label class="lbl">Cliente</label><select class="inp" id="ep-cli">'+cliOpts+'</select></div>'
+    +'<div><label class="lbl">Fruta</label><select class="inp" id="ep-fruta" onchange="atualizarBancasEdicao()">'+frutaOpts+'</select></div>'
+    +'<div><label class="lbl">Mercadoria</label><select class="inp" id="ep-merc">'+mercOpts+'</select></div>'
+    +'<div><label class="lbl">Quantidade (cx)</label><input class="inp" id="ep-qtd" type="number" value="'+p.quantidade+'"></div>'
+    +'<div><label class="lbl">Valor/cx (R$)</label><input class="inp" id="ep-valor" type="number" step="0.01" value="'+(p.valor||0)+'"></div>'
+    +'<div><label class="lbl">Data Pedido</label><input class="inp" id="ep-data-ped" type="date" value="'+(p.data_pedido||'')+'"></div>'
+    +'<div><label class="lbl">Data Entrega</label><input class="inp" id="ep-data-ent" type="date" value="'+(p.data_entrega||'')+'"></div>'
+    +'</div>'
+    +'<div style="margin-bottom:10px;">'
+    +'<label class="lbl" id="ep-banca-label">Bancas / Calibre</label>'
+    +'<div class="chk-grid" id="ep-bancas-grid">'+bancasHtml+'</div>'
+    +'</div>'
+    +'<div style="margin-bottom:14px;"><label class="lbl">Observações</label>'
+    +'<input class="inp" id="ep-obs" value="'+(p.obs||'')+'"></div>'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button class="btn btn-p" onclick="salvarEdicaoPedido()">💾 Salvar</button>'
+    +'<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+    +'</div>');
 }
+
+function atualizarBancasEdicao() {
+  var fruta = (document.getElementById('ep-fruta')||{}).value||'';
+  var citricos = ['LARANJA','LIMA TAITI','LIMÃO','MEXERICA','MEXERICA POKAN'];
+  var ehCitrico = citricos.some(function(c){return fruta.toUpperCase().includes(c);});
+  var label = document.getElementById('ep-banca-label');
+  var grid = document.getElementById('ep-bancas-grid');
+  if(label) label.textContent = ehCitrico ? 'Bancas de Destino' : 'Calibre';
+  if(grid) {
+    var opts = ehCitrico
+      ? (typeof BANCAS_LISTA!=='undefined'?BANCAS_LISTA:['BANCA 1','BANCA 2','BANCA 3','BANCA 4','BANCA 5','BANCA 6','INDUSTRIA'])
+      : ['2A','2B','3A','3B','4A','4B'];
+    grid.innerHTML = opts.map(function(b){
+      return '<label class="chk-lbl"><input type="checkbox" value="'+b+'" class="ep-banca-cb"> '+b+'</label>';
+    }).join('');
+  }
+}
+
 
 
 async function salvarEdicaoPedido() {
   var id = window._editPedidoId;
-  if(!id) return toast('Erro: ID não encontrado','err');
-  var pAnt = DB.pedidos.find(function(x){return x.id===id;});
-  // If pedido was Atendido and has lotes, restore stock before editing
-  if(pAnt && pAnt.status === 'Atendido' && pAnt.lotes && pAnt.lotes !== 'A definir pela produção') {
-    var parts = pAnt.lotes.split(',');
-    for(var pi=0; pi<parts.length; pi++) {
-      var m = parts[pi].trim().match(/^(.+?)\((\d+)cx\/?(\d+)?kg?\)$/);
-      if(m) {
-        var loteName = m[1].trim();
-        var qtdRest = parseInt(m[2]);
-        var loteObj = DB.entradas.find(function(e){return e.lote===loteName;});
-        if(loteObj) {
-          var novoSaldo = (loteObj.quantidade_atual||0) + qtdRest;
-          loteObj.quantidade_atual = novoSaldo;
-          loteObj.status = novoSaldo > 0 ? 'disponivel' : 'esgotado';
-          await PATCH('/api/entradas/'+loteObj.id+'/saldo', {quantidade_atual: novoSaldo, status: loteObj.status});
-        }
-      }
-    }
-  }
   var p = DB.pedidos.find(function(x){return x.id===id;});
   if(!p) return;
-  var cliEl = document.getElementById('ep-cli');
-  var cliId = cliEl ? cliEl.value : p.cliente_id;
-  var frutaEl = document.getElementById('ep-fruta');
-  var fruta = frutaEl ? frutaEl.value : p.fruta;
-  var qtd = parseInt((document.getElementById('ep-qtd')||{}).value)||0;
-  var valor = parseFloat((document.getElementById('ep-valor')||{}).value)||0;
+  if(p.status==='Atendido') return toast('Pedido já atendido','err');
+
+  var cliId = (document.getElementById('ep-cli')||{}).value || p.cliente_id;
+  var fruta = (document.getElementById('ep-fruta')||{}).value || p.fruta;
+  var mercEl = document.getElementById('ep-merc');
+  var mercId = mercEl ? mercEl.value : p.mercadoria_id;
+  var merc = DB.produtos.find(function(m){return m.id===mercId;});
+  var peso = merc ? parseFloat(merc.peso)||20 : p.peso_unitario||20;
+  var qtd = parseInt((document.getElementById('ep-qtd')||{}).value)||p.quantidade;
+  var valor = parseFloat((document.getElementById('ep-valor')||{}).value)||p.valor||0;
   var dataPed = (document.getElementById('ep-data-ped')||{}).value || p.data_pedido;
   var dataEnt = (document.getElementById('ep-data-ent')||{}).value || p.data_entrega;
-  var bancas = (document.getElementById('ep-bancas')||{}).value || p.bancas;
-  var obs = (document.getElementById('ep-obs')||{}).value || '';
+  var bancas = Array.from(document.querySelectorAll('.ep-banca-cb:checked')).map(function(c){return c.value;}).join(', ');
+  var obs = (document.getElementById('ep-obs')||{}).value || p.obs||'';
   var cli = DB.clientes.find(function(c){return c.id===cliId;});
-  var updates = {
-    cliente_id: cliId,
-    cliente_nome: cli ? cli.nome : p.cliente_nome,
-    fruta: fruta,
-    quantidade: qtd,
-    quantidade_kg: qtd*(p.peso_unitario||1),
-    valor: valor,
-    data_pedido: dataPed,
-    data_entrega: dataEnt,
-    bancas: bancas,
-    obs: obs
+
+  var payload = {
+    cliente_id:cliId, cliente_nome:cli?cli.nome:p.cliente_nome,
+    fruta, mercadoria_id:mercId, mercadoria_nome:merc?merc.nome:p.mercadoria_nome,
+    peso_unitario:peso, quantidade:qtd, quantidade_kg:qtd*peso,
+    valor, data_pedido:dataPed, data_entrega:dataEnt,
+    bancas:bancas||p.bancas, obs
   };
-  toast('⏳ Salvando...', 'warn');
-  var res = await PUT('/api/pedidos/'+id, updates);
-  if(res) {
-    Object.assign(p, updates);
-    closeModal();
-    toast('✅ Pedido atualizado!');
-    renderPedidos();
-  } else {
-    toast('❌ Erro ao salvar pedido','err');
-  }
+
+  await PUT('/api/pedidos/'+id, payload);
+  Object.assign(p, payload);
+  closeModal();
+  toast('✅ Pedido atualizado!');
+  renderPedidos();
 }
+
 
 async function atenderPedido(id) {
   const p=DB.pedidos.find(x=>x.id===id); if(!p) return;
@@ -1858,6 +1877,7 @@ function renderRomaneio() {
 
   // ── BUILD HTML ────────────────────────────────────────
   var html = '';
+  console.log('[Romaneio] disponiveis:', disponiveis.length, 'ativas:', ativas.length, 'total pedidos:', (DB.pedidos||[]).length, 'atendidos:', (DB.pedidos||[]).filter(function(p){return p.status==='Atendido';}).length);
 
   // SEÇÃO 1: MONTAR CARGA
   html += '<div class="card" style="margin-bottom:12px;">'
@@ -2445,7 +2465,8 @@ function renderEstoque() {
 function renderFinanceiro() {
   var dtIni = (document.getElementById('fin-dt-ini')||{}).value || '';
   var dtFim = (document.getElementById('fin-dt-fim')||{}).value || '';
-  const saldos=DB.clientes.map(c=>{
+  var finCli = (document.getElementById('fin-cli')||{}).value || '';
+  const saldos=DB.clientes.filter(c=> !finCli || c.id===finCli).map(c=>{
     const totalPed=DB.pedidos.filter(p=>p.cliente_id===c.id && (!dtIni||p.data_pedido>=dtIni) && (!dtFim||p.data_pedido<=dtFim)).reduce((s,p)=>s+(p.valor||0)*p.quantidade,0);
     const totalPag=DB.pagamentos.filter(p=>p.cliente_id===c.id && (!dtIni||p.data>=dtIni) && (!dtFim||p.data<=dtFim)).reduce((s,p)=>s+(p.valor||0),0);
     return{...c,totalPed,totalPag,saldo:totalPed-totalPag};
@@ -2456,9 +2477,14 @@ function renderFinanceiro() {
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <div class="section-title" style="margin:0;flex:1;">🔍 Filtrar por Período</div>
       <label style="font-size:11px;color:var(--sub);">De:</label>
-      <input class="inp" id="fin-dt-ini" type="date" style="max-width:150px;" oninput="renderFinanceiro()">
+      <input class="inp" id="fin-dt-ini" type="date" style="max-width:140px;" oninput="renderFinanceiro()">
       <label style="font-size:11px;color:var(--sub);">Até:</label>
-      <input class="inp" id="fin-dt-fim" type="date" style="max-width:150px;" oninput="renderFinanceiro()">
+      <input class="inp" id="fin-dt-fim" type="date" style="max-width:140px;" oninput="renderFinanceiro()">
+      <label style="font-size:11px;color:var(--sub);">Cliente:</label>
+      <select class="inp" id="fin-cli" style="max-width:180px;" onchange="renderFinanceiro()">
+        <option value="">Todos</option>
+        ${DB.clientes.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')}
+      </select>
       <button class="btn btn-s btn-sm" onclick="document.getElementById('fin-dt-ini').value='';document.getElementById('fin-dt-fim').value='';renderFinanceiro()">✕ Limpar</button>
       <button class="btn btn-p btn-sm" onclick="imprimirRelatorio()">🖨️ Imprimir</button>
     </div>
