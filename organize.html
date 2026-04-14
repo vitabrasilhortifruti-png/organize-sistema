@@ -1203,7 +1203,7 @@ function imprimirPedidosFiltrados() {
     +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Pedidos</div><div style="font-size:16px;font-weight:800;color:#f97316;">'+peds.length+'</div></div>'
     +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Total Caixas</div><div style="font-size:16px;font-weight:800;color:#f97316;">'+totalCx+' cx</div></div>'
     +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Total KG</div><div style="font-size:16px;font-weight:800;color:#10b981;">'+totalKg.toFixed(0)+' kg</div></div>'
-    +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Paletes</div><div style="font-size:16px;font-weight:800;color:#7c3aed;">'+totalPal+' pal</div></div>'
+    +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Paletes</div><div style="font-size:16px;font-weight:800;color:#7c3aed;">'+fmtPaletes(totalPal*30)+'</div></div>'
     +'</div>'
     +'<table><thead><tr><th>Cliente</th><th>Fruta</th><th>Produto/Embal.</th><th style="text-align:center">Caixas</th><th style="text-align:center">KG Total</th><th style="text-align:center">Paletes</th><th>Data Pedido</th><th>Entrega</th><th>Status</th></tr></thead><tbody>'
     +peds.map(function(p){
@@ -1233,14 +1233,14 @@ function imprimirPedidosPendentes() {
     +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Pendentes</div><div style="font-size:18px;font-weight:800;color:#f97316;">'+peds.length+'</div></div>'
     +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Total Caixas</div><div style="font-size:18px;font-weight:800;">'+totalCx+' cx</div></div>'
     +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Total KG</div><div style="font-size:18px;font-weight:800;color:#10b981;">'+totalKg.toFixed(0)+' kg</div></div>'
-    +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Paletes</div><div style="font-size:18px;font-weight:800;color:#7c3aed;">'+totalPal+' pal</div></div>'
+    +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Paletes</div><div style="font-size:18px;font-weight:800;color:#7c3aed;">'+fmtPaletes(totalPal*30)+'</div></div>'
     +'</div>'
     +(peds.length===0
       ? '<p style="text-align:center;color:#10b981;padding:20px;font-size:14px;">✅ Nenhum pedido pendente!</p>'
       : '<table><thead><tr><th>#</th><th>Cliente</th><th>Produto/Embal.</th><th style="text-align:center">Caixas</th><th style="text-align:center">KG</th><th style="text-align:center">Paletes</th><th>Banca/Calibre</th><th>Entrega</th></tr></thead><tbody>'
         +peds.map(function(p,i){
           var atrasado = p.data_entrega < hoje;
-          var pal = Math.ceil(p.quantidade/30);
+          var pal = p.quantidade; // raw for fmtPaletes
           return '<tr style="background:'+(atrasado?'#fff5f5':'')+';">'
             +'<td style="font-weight:800;text-align:center;color:#f97316;">'+(i+1)+'</td>'
             +'<td style="font-weight:700;">'+p.cliente_nome+'</td>'
@@ -1912,7 +1912,7 @@ function renderRomaneio() {
         +'<div style="font-size:13px;font-weight:700;color:var(--text);">'+g.cliente_nome+'</div>'
         +'<div style="font-size:10px;color:var(--muted);margin-top:2px;">'
         +frutas+' · <strong style="color:var(--accent)">'+g.totalCx+' cx</strong>'
-        +' · '+g.totalKg.toFixed(0)+' kg · '+pal+' pal'
+        +' · '+g.totalKg.toFixed(0)+' kg · '+fmtPaletes(g.totalCx)+' pal'
         +'</div>'
         +'</div>'
         +'<div style="text-align:right;font-size:10px;">'+(atrasado?'⚠️ ':'')+fmtDate(g.data_entrega)+'</div>'
@@ -2079,7 +2079,7 @@ function imprimirMapaCarga() {
     totalPal+=Math.ceil(p.quantidade/30);
   });
   var linhas = peds.map(function(p,i){
-    var pal=Math.ceil(p.quantidade/30);
+    var pal=p.quantidade;
     return '<tr>'
       +'<td style="font-weight:800;text-align:center;font-size:13px;">'+(i+1)+'</td>'
       +'<td style="font-weight:700;">'+p.cliente_nome+'</td>'
@@ -2133,7 +2133,7 @@ function imprimirMapaCarga() {
     +'<div class="rcard"><div class="rl">Pedidos</div><div class="rv">'+peds.length+'</div></div>'
     +'<div class="rcard"><div class="rl">Total Caixas</div><div class="rv">'+totalCx+' cx</div></div>'
     +'<div class="rcard"><div class="rl">Total Peso</div><div class="rv">'+totalKg.toFixed(0)+' kg</div></div>'
-    +'<div class="rcard destaque"><div class="rl">Total Paletes</div><div class="rv pal">'+totalPal+' pal</div></div>'
+    +'<div class="rcard destaque"><div class="rl">Total Paletes</div><div class="rv pal">'+fmtPaletes(totalPal*30)+'</div></div>'
     +'<div class="rcard"><div class="rl">Cxs/Palete</div><div class="rv" style="font-size:14px;">30 cx</div></div>'
     +'</div>'
     +'<table><thead><tr>'
@@ -2927,7 +2927,7 @@ function imprimirPedido(id) {
   if(!p) return;
   var cli = DB.clientes.find(function(c){return c.id===p.cliente_id;});
   var empNome = (DB.empresa && DB.empresa.nome) ? DB.empresa.nome : 'Organize';
-  var pal = Math.ceil(p.quantidade/30);
+  var pal = p.quantidade // raw qty for fmtPaletes;
   var win = window.open('', '_blank', 'width=800,height=600');
   win.document.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">'
     +'<title>Pedido</title>'
@@ -3395,7 +3395,7 @@ function imprimirRelatorioProducao() {
     +'<div class="ri"><div class="rl">Pedidos</div><div class="rv">'+peds.length+'</div></div>'
     +'<div class="ri"><div class="rl">Total Caixas</div><div class="rv">'+totalCx+'</div></div>'
     +'<div class="ri"><div class="rl">Total KG</div><div class="rv">'+totalKg.toFixed(0)+' kg</div></div>'
-    +'<div class="ri"><div class="rl">Paletes</div><div class="rv">'+totalPal+' pal</div></div>'
+    +'<div class="ri"><div class="rl">Paletes</div><div class="rv">'+fmtPaletes(totalPal*30)+'</div></div>'
     +'</div>'
     +(peds.length===0
       ? '<p style="text-align:center;color:green;padding:20px;">✅ Nenhum pedido pendente!</p>'
@@ -4027,7 +4027,7 @@ function atualizarResumoRom() {
     +'<div><div style="font-size:9px;color:var(--muted)">PEDIDOS</div><div style="font-size:16px;font-weight:800;color:var(--text)">'+cbs.length+'</div></div>'
     +'<div><div style="font-size:9px;color:var(--muted)">CAIXAS</div><div style="font-size:16px;font-weight:800;color:var(--accent)">'+totalCx+'</div></div>'
     +'<div><div style="font-size:9px;color:var(--muted)">KG</div><div style="font-size:16px;font-weight:800;color:var(--green)">'+totalKg.toFixed(0)+' kg</div></div>'
-    +'<div><div style="font-size:9px;color:var(--muted)">PALETES</div><div style="font-size:16px;font-weight:800;color:var(--yellow)">'+totalPal+' pal</div></div>'
+    +'<div><div style="font-size:9px;color:var(--muted)">PALETES</div><div style="font-size:16px;font-weight:800;color:var(--yellow)">'+fmtPaletes(totalPal*30)+'</div></div>'
     +'</div>';
 }
 
@@ -4108,7 +4108,7 @@ function modalVerGrupo(chave) {
     +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">'
     +'<div style="background:#060a12;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:9px;color:var(--muted)">CAIXAS</div><div style="font-size:20px;font-weight:800;color:var(--accent)">'+totalCx+'</div></div>'
     +'<div style="background:#060a12;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:9px;color:var(--muted)">KG TOTAL</div><div style="font-size:20px;font-weight:800;color:var(--green)">'+totalKg.toFixed(0)+'</div></div>'
-    +'<div style="background:#060a12;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:9px;color:var(--muted)">PALETES</div><div style="font-size:20px;font-weight:800;color:#7c3aed;">'+Math.ceil(totalCx/30)+'</div></div>'
+    +'<div style="background:#060a12;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:9px;color:var(--muted)">PALETES</div><div style="font-size:16px;font-weight:800;color:#7c3aed;">'+fmtPaletes(totalCx)+'</div></div>'
     +'<div style="background:#060a12;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:9px;color:var(--muted)">VALOR TOTAL</div><div style="font-size:16px;font-weight:800;color:var(--accent)">'+fmtMoney(totalValor)+'</div></div>'
     +'</div>'
 
@@ -4298,13 +4298,25 @@ function imprimirGrupoPedido(chave) {
       }
     }
   
+// ── Formata paletes: 42cx → "1 pal + 12 cx"  30cx → "1 pal"  12cx → "12 cx"
+function fmtPaletes(qtd, unidade) {
+  unidade = unidade || 'cx';
+  if(!qtd || qtd <= 0) return '0 '+unidade;
+  var pals = Math.floor(qtd / 30);
+  var resto = qtd % 30;
+  if(pals === 0) return qtd + ' ' + unidade;
+  if(resto === 0) return pals + ' pal';
+  return pals + ' pal + ' + resto + ' ' + unidade;
+}
+
+
 // ── VER PEDIDO COMPLETO ───────────────────────────────────
 function modalVerPedido(id) {
   var p = DB.pedidos.find(function(x){return x.id===id;});
   if(!p) return;
   var cli = DB.clientes.find(function(c){return c.id===p.cliente_id;});
   var atrasado = p.data_entrega < today() && p.status==='Pendente';
-  var pal = Math.ceil(p.quantidade/30);
+  var pal = p.quantidade // raw qty for fmtPaletes;
   var statusCor = p.status==='Atendido'?'var(--green)':p.status==='Pendente'?'var(--yellow)':'var(--accent)';
 
   modal(
@@ -4792,7 +4804,7 @@ function modalVerPedido(id) {
   if(!p) return;
   var cli = DB.clientes.find(function(c){return c.id===p.cliente_id;});
   var atrasado = p.data_entrega < today() && p.status==='Pendente';
-  var pal = Math.ceil(p.quantidade/30);
+  var pal = p.quantidade // raw qty for fmtPaletes;
   var statusCor = p.status==='Atendido'?'var(--green)':p.status==='Pendente'?'var(--yellow)':'var(--accent)';
 
   modal(
