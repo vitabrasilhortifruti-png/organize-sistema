@@ -4774,6 +4774,45 @@ async function lancarPagamentoPedido(chave) {
 }
 
 
+
+async function addRetornoCaixa() {
+  var cliId = (document.getElementById('ret-cli')||{}).value||'';
+  var data  = (document.getElementById('ret-data')||{}).value||'';
+  var marca = (document.getElementById('ret-marca')||{}).value||'';
+  var qtd   = parseInt((document.getElementById('ret-qtd')||{}).value)||0;
+  var pal   = parseInt((document.getElementById('ret-pal')||{}).value)||0;
+  var obs   = (document.getElementById('ret-obs')||{}).value||'';
+  if(!cliId) return toast('Selecione o cliente','err');
+  if(!data)  return toast('Informe a data','err');
+  if(qtd<=0) return toast('Informe a quantidade de caixas','err');
+  var res = await POST('/api/retornos_caixa', {id:uid(),cliente_id:cliId,data:data,quantidade:qtd,paletes:pal,marca:marca,obs:obs});
+  if(res) {
+    if(!DB.retornos_caixa) DB.retornos_caixa = [];
+    DB.retornos_caixa.unshift(res);
+    toast('✅ Retorno de '+qtd+' cx registrado!');
+    renderCaixas();
+  }
+}
+
+async function addSaidaCaixa() {
+  var cliId = (document.getElementById('sai-cli')||{}).value||'';
+  var data  = (document.getElementById('sai-data')||{}).value||'';
+  var marca = (document.getElementById('sai-marca')||{}).value||'';
+  var qtd   = parseInt((document.getElementById('sai-qtd')||{}).value)||0;
+  var pal   = parseInt((document.getElementById('sai-pal')||{}).value)||0;
+  var obs   = (document.getElementById('sai-obs')||{}).value||'';
+  if(!cliId) return toast('Selecione o cliente','err');
+  if(!data)  return toast('Informe a data','err');
+  if(qtd<=0) return toast('Informe a quantidade de caixas','err');
+  var res = await POST('/api/saidas_caixa', {id:uid(),cliente_id:cliId,data:data,quantidade:qtd,paletes:pal,marca:marca,obs:obs});
+  if(res) {
+    if(!DB.saidas_caixa) DB.saidas_caixa = [];
+    DB.saidas_caixa.unshift(res);
+    toast('✅ Saída de '+qtd+' cx registrada!');
+    renderCaixas();
+  }
+}
+
 </script>
   <script>
     // PWA install prompt

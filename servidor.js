@@ -489,8 +489,8 @@ app.delete('/api/vendas/:id/completo', auth, async (req, res) => {
   fazerBackup('del-venda-completo');
   res.json({ ok: true });
 });
-crudRoutes('retornos_caixa', ['cliente_id','data','quantidade','marca','obs']);
-crudRoutes('saidas_caixa',   ['cliente_id','data','quantidade','marca','obs']);
+crudRoutes('retornos_caixa', ['cliente_id','data','quantidade','paletes','marca','obs']);
+crudRoutes('saidas_caixa',   ['cliente_id','data','quantidade','paletes','marca','obs']);
 crudRoutes('pagamentos',     ['cliente_id','valor','data','forma','recebedor','obs']);
 crudRoutes('descartes',      ['lote_id','lote','fruta','quantidade','motivo','data']);
 
