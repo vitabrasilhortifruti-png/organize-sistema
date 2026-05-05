@@ -2577,34 +2577,205 @@ async function delPagamento(id) {
 // RELATÓRIOS
 // ═══════════════════════════════════════════════════════
 function renderRelatorios() {
-  document.getElementById('content').innerHTML=`
-  <div class="grid2" style="margin-bottom:16px;">
-    <div class="card">
-      <div class="section-title"><i data-lucide="bar-chart-3" style="width:16px;height:16px;"></i> Estatísticas Gerais</div>
-      <div style="font-size:12px;line-height:2;color:var(--sub);">
-        <div>📦 Entradas: <strong style="color:var(--text)">${DB.entradas.length}</strong></div>
-        <div>📋 Pedidos: <strong style="color:var(--text)">${DB.pedidos.length}</strong></div>
-        <div>📋 Pendentes: <strong style="color:var(--yellow)">${DB.pedidos.filter(p=>p.status==='Pendente').length}</strong></div>
-        <div>💰 Vendas: <strong style="color:var(--green)">${fmtMoney(DB.vendas.reduce((s,v)=>s+(v.valor||0),0))}</strong></div>
-        <div>💳 Pagamentos: <strong style="color:var(--green)">${fmtMoney(DB.pagamentos.reduce((s,p)=>s+(p.valor||0),0))}</strong></div>
-      </div>
-    </div>
-    ${isAdmin()?`
-    <div class="card">
-      <div class="section-title"><i data-lucide="database" style="width:16px;height:16px;"></i> Backups</div>
-      <div style="font-size:12px;color:var(--sub);margin-bottom:12px;">Backups automáticos a cada ação e a cada 10 minutos.</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-        <button class="btn btn-s" onclick="imprimirRelatorio()">🖨️ Imprimir Relatório</button>
-        <button class="btn btn-p btn-sm" onclick="modalHistoricoPrecos()">📈 Preços por Fruta</button>
-        <button class="btn btn-g btn-sm" onclick="modalComissao()">💼 Comissão</button>
-      </div>
-      <div style="font-size:11px;color:var(--sub);margin-bottom:8px;">📧 Backup automático todo domingo às 8h para nildomoraesagro@gmail.com.br</div>
-      <div id="backup-lista" style="margin-top:12px;"></div>
-    </div>`:''}
-  </div>`;
+  var cliOpts = DB.clientes.map(function(c){return '<option value="'+c.id+'">'+c.nome+'</option>';}).join('');
+  var fornOpts = DB.fornecedores.map(function(f){return '<option value="'+f.id+'">'+f.nome+'</option>';}).join('');
+
+  document.getElementById('content').innerHTML =
+    '<div class="section-title" style="margin-bottom:14px;">📊 Relatórios</div>'
+
+    // ── LINHA 1: CLIENTES + FORNECEDORES ──────────────────
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">'
+
+    // RELATÓRIO POR CLIENTE
+    +'<div class="card">'
+    +'<div class="section-title" style="color:var(--accent);margin-bottom:10px;">👤 Relatório por Cliente</div>'
+    +'<div style="margin-bottom:8px;"><label class="lbl">Cliente *</label>'
+    +'<select class="inp" id="rel-cli"><option value="">Selecione</option>'+cliOpts+'</select></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
+    +'<div><label class="lbl">Data início</label><input class="inp" id="rel-cli-ini" type="date"></div>'
+    +'<div><label class="lbl">Data fim</label><input class="inp" id="rel-cli-fim" type="date"></div>'
+    +'</div>'
+    +'<div style="color:var(--muted);font-size:10px;margin-bottom:10px;">Inclui: pedidos, vendas, pagamentos, caixas, saldo devedor</div>'
+    +'<button class="btn btn-p" onclick="imprimirRelatorioCliente()">🖨️ Gerar Relatório</button>'
+    +'</div>'
+
+    // RELATÓRIO POR FORNECEDOR
+    +'<div class="card">'
+    +'<div class="section-title" style="color:var(--green);margin-bottom:10px;">🏭 Relatório por Fornecedor</div>'
+    +'<div style="margin-bottom:8px;"><label class="lbl">Fornecedor *</label>'
+    +'<select class="inp" id="rel-forn"><option value="">Selecione</option>'+fornOpts+'</select></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
+    +'<div><label class="lbl">Data início</label><input class="inp" id="rel-forn-ini" type="date"></div>'
+    +'<div><label class="lbl">Data fim</label><input class="inp" id="rel-forn-fim" type="date"></div>'
+    +'</div>'
+    +'<div style="color:var(--muted);font-size:10px;margin-bottom:10px;">Inclui: todas entradas, lotes, KG recebido, valor total</div>'
+    +'<button class="btn btn-g" onclick="imprimirRelatorioFornecedor()">🖨️ Gerar Relatório</button>'
+    +'</div>'
+    +'</div>'
+
+    // ── LINHA 2: PEDIDOS + VENDAS ─────────────────────────
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">'
+
+    // RELATÓRIO DE PEDIDOS
+    +'<div class="card">'
+    +'<div class="section-title" style="color:var(--yellow);margin-bottom:10px;">📋 Relatório de Pedidos</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
+    +'<div><label class="lbl">Data início</label><input class="inp" id="rel-ped-ini" type="date"></div>'
+    +'<div><label class="lbl">Data fim</label><input class="inp" id="rel-ped-fim" type="date"></div>'
+    +'</div>'
+    +'<div style="margin-bottom:8px;"><label class="lbl">Cliente (opcional)</label>'
+    +'<select class="inp" id="rel-ped-cli"><option value="">Todos</option>'+cliOpts+'</select></div>'
+    +'<div style="margin-bottom:8px;"><label class="lbl">Status</label>'
+    +'<select class="inp" id="rel-ped-status"><option value="">Todos</option><option>Pendente</option><option>Atendido</option></select></div>'
+    +'<button class="btn btn-s" onclick="imprimirRelatorioPedidos()">🖨️ Gerar Relatório</button>'
+    +'</div>'
+
+    // RELATÓRIO DE VENDAS
+    +'<div class="card">'
+    +'<div class="section-title" style="color:var(--green);margin-bottom:10px;">💰 Relatório de Vendas</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
+    +'<div><label class="lbl">Data início</label><input class="inp" id="rel-ven-ini" type="date"></div>'
+    +'<div><label class="lbl">Data fim</label><input class="inp" id="rel-ven-fim" type="date"></div>'
+    +'</div>'
+    +'<div style="margin-bottom:10px;"><label class="lbl">Cliente (opcional)</label>'
+    +'<select class="inp" id="rel-ven-cli"><option value="">Todos</option>'+cliOpts+'</select></div>'
+    +'<button class="btn btn-g" onclick="imprimirRelatorioVendas()">🖨️ Gerar Relatório</button>'
+    +'</div>'
+    +'</div>'
+
+    // ── LINHA 3: ENTRADAS + CAIXAS ────────────────────────
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">'
+
+    // RELATÓRIO DE ENTRADAS
+    +'<div class="card">'
+    +'<div class="section-title" style="margin-bottom:10px;">⬇️ Relatório de Entradas</div>'
+    +'<div style="margin-bottom:8px;"><label class="lbl">Fornecedor</label>'
+    +'<select class="inp" id="rel-ent-forn"><option value="">Todos</option>'+fornOpts+'</select></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">'
+    +'<div><label class="lbl">Data início</label><input class="inp" id="rel-ent-ini" type="date"></div>'
+    +'<div><label class="lbl">Data fim</label><input class="inp" id="rel-ent-fim" type="date"></div>'
+    +'</div>'
+    +'<button class="btn btn-s" onclick="gerarRelEntradas()">🖨️ Gerar Relatório</button>'
+    +'</div>'
+
+    // RELATÓRIO DE CAIXAS
+    +'<div class="card">'
+    +'<div class="section-title" style="margin-bottom:10px;">📦 Relatório de Caixas</div>'
+    +'<div style="margin-bottom:8px;"><label class="lbl">Cliente</label>'
+    +'<select class="inp" id="rel-cx-cli"><option value="">Todos</option>'+cliOpts+'</select></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">'
+    +'<div><label class="lbl">Data início</label><input class="inp" id="rel-cx-ini" type="date"></div>'
+    +'<div><label class="lbl">Data fim</label><input class="inp" id="rel-cx-fim" type="date"></div>'
+    +'</div>'
+    +'<button class="btn btn-s" onclick="gerarRelCaixas()">🖨️ Gerar Relatório</button>'
+    +'</div>'
+    +'</div>'
+
+    // ── LINHA 4: OUTROS ───────────────────────────────────
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">'
+    +'<div class="card">'
+    +'<div class="section-title" style="margin-bottom:10px;">📈 Outros Relatórios</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+    +'<button class="btn btn-s btn-sm" onclick="modalHistoricoPrecos()">📈 Preços por Fruta</button>'
+    +'<button class="btn btn-s btn-sm" onclick="modalComissao()">💼 Comissão</button>'
+    +'<button class="btn btn-s btn-sm" onclick="imprimirRelatorioEntradas()">📋 Entradas (filtro atual)</button>'
+    +'<button class="btn btn-s btn-sm" onclick="imprimirRelatorioCaixas()">📦 Caixas (filtro atual)</button>'
+    +'</div>'
+    +'</div>'
+
+    // BACKUP
+    +(isAdmin() ?
+      '<div class="card">'
+      +'<div class="section-title" style="margin-bottom:10px;">💾 Backup</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">'
+      +'<button class="btn btn-p btn-sm" onclick="fazerBackupAgora()">💾 Backup Agora</button>'
+      +'<button class="btn btn-g btn-sm" onclick="enviarBackupEmail()">📧 Enviar por Email</button>'
+      +'</div>'
+      +'<div style="font-size:10px;color:var(--muted);margin-bottom:8px;">📧 Destino: nildomoraesagro@gmail.com</div>'
+      +'<div id="backup-lista"></div>'
+      +'</div>'
+    : '');
+
   if(isAdmin()) carregarBackups();
   lucide.createIcons();
 }
+
+function gerarRelEntradas() {
+  // Sync filters with entrada module and print
+  var forn = (document.getElementById('rel-ent-forn')||{}).value||'';
+  var ini  = (document.getElementById('rel-ent-ini')||{}).value||'';
+  var fim  = (document.getElementById('rel-ent-fim')||{}).value||'';
+  var lista = DB.entradas.filter(function(e){
+    if(forn && e.fornecedor_id!==forn) return false;
+    if(ini && e.data<ini) return false;
+    if(fim && e.data>fim) return false;
+    return true;
+  });
+  var fornNome = '';
+  if(forn){ var fo=DB.fornecedores.find(function(f){return f.id===forn;}); fornNome=fo?fo.nome:''; }
+  var totalKg = lista.reduce(function(s,e){return s+(e.total_kg||0);},0);
+  var titulo = 'Relatório de Entradas'+(fornNome?' — '+fornNome:'')+(ini||fim?' ('+fmtDate(ini)+' a '+fmtDate(fim)+')':'');
+  var corpo = '<div style="font-size:16px;font-weight:800;margin-bottom:10px;">'+titulo+'</div>'
+    +'<div style="margin-bottom:12px;display:flex;gap:10px;">'
+    +'<div style="border:1px solid #eee;border-radius:6px;padding:8px;text-align:center;flex:1;"><div style="font-size:9px;color:#888;">LOTES</div><div style="font-size:18px;font-weight:800;color:#f97316;">'+lista.length+'</div></div>'
+    +'<div style="border:1px solid #eee;border-radius:6px;padding:8px;text-align:center;flex:1;"><div style="font-size:9px;color:#888;">KG TOTAL</div><div style="font-size:18px;font-weight:800;color:#10b981;">'+totalKg.toFixed(0)+' kg</div></div>'
+    +'</div>'
+    +'<table style="width:100%;border-collapse:collapse;">'
+    +'<thead><tr style="background:#1a2e1b;color:#fff;"><th style="padding:6px 8px;text-align:left;">Data</th><th>Lote</th><th>Fruta</th><th>Fornecedor</th><th>Qtd</th><th>KG</th><th>Status</th></tr></thead><tbody>'
+    +lista.map(function(e,i){
+      var fo=DB.fornecedores.find(function(f){return f.id===e.fornecedor_id;})||{nome:'—'};
+      var sd=e.quantidade_atual!=null?e.quantidade_atual:e.quantidade;
+      return '<tr style="background:'+(i%2?'#f9f9f9':'#fff')+'">'
+        +'<td style="padding:5px 7px;">'+fmtDate(e.data)+'</td>'
+        +'<td style="padding:5px 7px;font-weight:700;">'+e.lote+'</td>'
+        +'<td style="padding:5px 7px;">'+e.fruta+'</td>'
+        +'<td style="padding:5px 7px;">'+fo.nome+'</td>'
+        +'<td style="padding:5px 7px;text-align:center;">'+e.quantidade+'</td>'
+        +'<td style="padding:5px 7px;text-align:center;font-weight:700;color:#10b981;">'+(e.total_kg||0).toFixed(0)+' kg</td>'
+        +'<td style="padding:5px 7px;"><span style="background:'+(sd>0?'#d1fae5':'#fee2e2')+';color:'+(sd>0?'#065f46':'#991b1b')+';padding:2px 6px;border-radius:8px;font-size:9px;">'+(sd>0?'Disponível':'Zerado')+'</span></td>'
+        +'</tr>';
+    }).join('')+'</tbody></table>';
+  abrirJanelaImpressao('Entradas', corpo);
+}
+
+function gerarRelCaixas() {
+  var cliId = (document.getElementById('rel-cx-cli')||{}).value||'';
+  var ini   = (document.getElementById('rel-cx-ini')||{}).value||'';
+  var fim   = (document.getElementById('rel-cx-fim')||{}).value||'';
+  // Set filters in caixas module and call its print
+  var fakeCliEl = document.getElementById('cx-f-cli');
+  var fakeIniEl = document.getElementById('cx-f-ini');
+  var fakeFimEl = document.getElementById('cx-f-fim');
+  // Since those elements don't exist here, use local vars directly
+  // Build saldo report inline
+  var saldos = {};
+  (DB.saidas_caixa||[]).forEach(function(s){
+    if(cliId && s.cliente_id!==cliId) return;
+    var k=s.cliente_id; if(!saldos[k]) saldos[k]={cx:0};
+    saldos[k].cx += s.quantidade||0;
+  });
+  (DB.retornos_caixa||[]).forEach(function(r){
+    if(cliId && r.cliente_id!==cliId) return;
+    var k=r.cliente_id; if(!saldos[k]) saldos[k]={cx:0};
+    saldos[k].cx -= r.quantidade||0;
+  });
+  var saldoRows = Object.keys(saldos).map(function(cid){
+    var cli=DB.clientes.find(function(c){return c.id===cid;})||{nome:'—'};
+    var cx=saldos[cid].cx;
+    var cor=cx>0?'#f97316':cx<0?'#10b981':'#888';
+    return '<tr><td style="padding:6px 8px;font-weight:700;">'+cli.nome+'</td>'
+      +'<td style="padding:6px 8px;font-weight:800;color:'+cor+';">'+Math.abs(cx)+' cx</td>'
+      +'<td style="padding:6px 8px;color:'+cor+';">'+fmtPaletes(Math.abs(cx))+'</td>'
+      +'<td style="padding:6px 8px;font-weight:700;color:'+cor+';">'+(cx>0?'⚠️ Deve':(cx<0?'✅ Crédito':'✅ Quitado'))+'</td>'
+      +'</tr>';
+  }).join('');
+  var corpo = '<div style="font-size:16px;font-weight:800;margin-bottom:12px;">📦 Relatório de Caixas — Saldo por Cliente</div>'
+    +'<table style="width:100%;border-collapse:collapse;margin-bottom:14px;">'
+    +'<thead><tr style="background:#f97316;color:#fff;"><th style="padding:6px 8px;text-align:left;">Cliente</th><th>Saldo Caixas</th><th>Paletes</th><th>Situação</th></tr></thead>'
+    +'<tbody>'+saldoRows+'</tbody></table>';
+  abrirJanelaImpressao('Caixas — Saldo', corpo);
+}
+
 async function enviarBackupEmail() {
   const res = await POST('/api/backup/email', {});
   if(res) toast('✅ Backup enviado para seu e-mail!');
@@ -4902,6 +5073,205 @@ async function addSaidaCaixa() {
     toast('✅ Saída de '+qtd+' cx registrada!');
     renderCaixas();
   }
+}
+
+
+function imprimirRelatorioCliente() {
+  var cliId = (document.getElementById('rel-cli')||{}).value||'';
+  if(!cliId) return toast('Selecione um cliente','err');
+  var ini = (document.getElementById('rel-cli-ini')||{}).value||'';
+  var fim = (document.getElementById('rel-cli-fim')||{}).value||'';
+  var cli = DB.clientes.find(function(c){return c.id===cliId;});
+  if(!cli) return;
+
+  var pedidos = DB.pedidos.filter(function(p){
+    if(p.cliente_id!==cliId) return false;
+    if(ini && p.data_pedido<ini) return false;
+    if(fim && p.data_pedido>fim) return false;
+    return true;
+  });
+  var vendas = DB.vendas.filter(function(v){
+    if(v.cliente_id!==cliId) return false;
+    if(ini && v.data<ini) return false;
+    if(fim && v.data>fim) return false;
+    return true;
+  });
+  var pagamentos = DB.pagamentos.filter(function(p){
+    if(p.cliente_id!==cliId) return false;
+    if(ini && p.data<ini) return false;
+    if(fim && p.data>fim) return false;
+    return true;
+  });
+
+  var totalPed = pedidos.reduce(function(s,p){return s+(p.valor||0)*p.quantidade;},0);
+  var totalPag = pagamentos.reduce(function(s,p){return s+(p.valor||0);},0);
+  var saldo = totalPed - totalPag;
+
+  // Caixas saldo
+  var cxSai = (DB.saidas_caixa||[]).filter(function(s){return s.cliente_id===cliId;}).reduce(function(s,c){return s+(c.quantidade||0);},0);
+  var cxRet = (DB.retornos_caixa||[]).filter(function(r){return r.cliente_id===cliId;}).reduce(function(s,c){return s+(c.quantidade||0);},0);
+  var cxSaldo = cxSai - cxRet;
+
+  var corpo = '<div style="font-size:18px;font-weight:800;margin-bottom:4px;">👤 '+cli.nome+'</div>'
+    +(cli.contato?'<div style="font-size:11px;color:#666;margin-bottom:4px;">📞 '+cli.contato+'</div>':'')
+    +(cli.endereco?'<div style="font-size:11px;color:#666;margin-bottom:10px;">📍 '+cli.endereco+'</div>':'')
+    +(ini||fim?'<div style="font-size:11px;color:#888;margin-bottom:10px;">Período: '+fmtDate(ini)+' a '+fmtDate(fim)+'</div>':'')
+
+    // FINANCEIRO
+    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;">'
+    +'<div style="border:1px solid #eee;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:9px;color:#888;">TOTAL PEDIDOS</div><div style="font-size:16px;font-weight:800;color:#f97316;">'+fmtMoney(totalPed)+'</div></div>'
+    +'<div style="border:1px solid #eee;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:9px;color:#888;">PAGO</div><div style="font-size:16px;font-weight:800;color:#10b981;">'+fmtMoney(totalPag)+'</div></div>'
+    +'<div style="border:1px solid #eee;border-radius:6px;padding:8px;text-align:center;background:'+(saldo>0?'#fff7ed':'#f0fdf4')+'"><div style="font-size:9px;color:#888;">SALDO DEVEDOR</div><div style="font-size:16px;font-weight:800;color:'+(saldo>0?'#f97316':'#10b981')+'">'+fmtMoney(saldo)+'</div></div>'
+    +'</div>'
+
+    // PEDIDOS
+    +'<div style="font-size:12px;font-weight:800;margin-bottom:6px;">📋 PEDIDOS ('+pedidos.length+')</div>'
+    +'<table style="width:100%;border-collapse:collapse;margin-bottom:12px;font-size:10px;">'
+    +'<thead><tr style="background:#f97316;color:#fff;"><th style="padding:4px 6px;text-align:left;">Data</th><th>Entrega</th><th>Fruta</th><th>Cx</th><th>Valor</th><th>Status</th></tr></thead><tbody>'
+    +pedidos.map(function(p,i){
+      return '<tr style="background:'+(i%2?'#f9f9f9':'#fff')+'"><td style="padding:4px 6px;">'+fmtDate(p.data_pedido)+'</td>'
+        +'<td>'+fmtDate(p.data_entrega)+'</td><td>'+p.fruta+'</td>'
+        +'<td style="text-align:center;">'+p.quantidade+'</td>'
+        +'<td>'+fmtMoney((p.valor||0)*p.quantidade)+'</td>'
+        +'<td><span style="background:'+(p.status==='Atendido'?'#d1fae5':'#fef3c7')+';color:'+(p.status==='Atendido'?'#065f46':'#92400e')+';padding:1px 5px;border-radius:6px;font-size:9px;">'+p.status+'</span></td></tr>';
+    }).join('')+'</tbody></table>'
+
+    // PAGAMENTOS
+    +(pagamentos.length?'<div style="font-size:12px;font-weight:800;margin-bottom:6px;">💳 PAGAMENTOS ('+pagamentos.length+')</div>'
+    +'<table style="width:100%;border-collapse:collapse;margin-bottom:12px;font-size:10px;">'
+    +'<thead><tr style="background:#10b981;color:#fff;"><th style="padding:4px 6px;text-align:left;">Data</th><th>Valor</th><th>Forma</th><th>Obs</th></tr></thead><tbody>'
+    +pagamentos.map(function(p,i){
+      return '<tr style="background:'+(i%2?'#f9f9f9':'#fff')+'"><td style="padding:4px 6px;">'+fmtDate(p.data)+'</td>'
+        +'<td style="font-weight:700;color:#10b981;">'+fmtMoney(p.valor||0)+'</td>'
+        +'<td>'+(p.forma||'—')+'</td><td style="font-size:9px;">'+(p.obs||'—')+'</td></tr>';
+    }).join('')+'</tbody></table>':'')
+
+    // CAIXAS
+    +'<div style="font-size:12px;font-weight:800;margin-bottom:6px;">📦 CAIXAS</div>'
+    +'<div style="border:1px solid #eee;border-radius:6px;padding:10px;display:flex;gap:16px;">'
+    +'<div><div style="font-size:9px;color:#888;">Saídas</div><div style="font-weight:800;font-size:14px;color:#f97316;">'+cxSai+' cx</div></div>'
+    +'<div><div style="font-size:9px;color:#888;">Retornos</div><div style="font-weight:800;font-size:14px;color:#10b981;">'+cxRet+' cx</div></div>'
+    +'<div><div style="font-size:9px;color:#888;">Saldo Devedor</div><div style="font-weight:800;font-size:14px;color:'+(cxSaldo>0?'#f97316':'#10b981')+';">'+Math.abs(cxSaldo)+' cx '+(cxSaldo>0?'(deve)':'(crédito)')+'</div></div>'
+    +'</div>';
+
+  abrirJanelaImpressao('Cliente — '+cli.nome, corpo);
+}
+
+function imprimirRelatorioFornecedor() {
+  var fornId = (document.getElementById('rel-forn')||{}).value||'';
+  if(!fornId) return toast('Selecione um fornecedor','err');
+  var ini = (document.getElementById('rel-forn-ini')||{}).value||'';
+  var fim = (document.getElementById('rel-forn-fim')||{}).value||'';
+  var forn = DB.fornecedores.find(function(f){return f.id===fornId;});
+  if(!forn) return;
+
+  var entradas = DB.entradas.filter(function(e){
+    if(e.fornecedor_id!==fornId) return false;
+    if(ini && e.data<ini) return false;
+    if(fim && e.data>fim) return false;
+    return true;
+  });
+
+  var totalKg = entradas.reduce(function(s,e){return s+(e.total_kg||0);},0);
+  var totalCx = entradas.reduce(function(s,e){return s+e.quantidade;},0);
+  var frutas = [...new Set(entradas.map(function(e){return e.fruta;}))];
+
+  var corpo = '<div style="font-size:18px;font-weight:800;margin-bottom:4px;">🏭 '+forn.nome+'</div>'
+    +(forn.contato?'<div style="font-size:11px;color:#666;margin-bottom:4px;">📞 '+forn.contato+'</div>':'')
+    +(ini||fim?'<div style="font-size:11px;color:#888;margin-bottom:10px;">Período: '+fmtDate(ini)+' a '+fmtDate(fim)+'</div>':'')
+    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;">'
+    +'<div style="border:1px solid #eee;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:9px;color:#888;">LOTES</div><div style="font-size:18px;font-weight:800;color:#f97316;">'+entradas.length+'</div></div>'
+    +'<div style="border:1px solid #eee;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:9px;color:#888;">CAIXAS/SACOS</div><div style="font-size:18px;font-weight:800;color:#f97316;">'+totalCx+'</div></div>'
+    +'<div style="border:1px solid #eee;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:9px;color:#888;">KG TOTAL</div><div style="font-size:18px;font-weight:800;color:#10b981;">'+totalKg.toFixed(0)+' kg</div></div>'
+    +'</div>'
+    +(frutas.length?'<div style="margin-bottom:10px;font-size:11px;"><strong>Frutas fornecidas:</strong> '+frutas.join(', ')+'</div>':'')
+    +'<table style="width:100%;border-collapse:collapse;font-size:10px;">'
+    +'<thead><tr style="background:#1a2e1b;color:#fff;"><th style="padding:5px 7px;text-align:left;">Data</th><th>Lote</th><th>Fruta</th><th>Qtd</th><th>KG</th><th>Saldo</th><th>Status</th></tr></thead><tbody>'
+    +entradas.map(function(e,i){
+      var sd=e.quantidade_atual!=null?e.quantidade_atual:e.quantidade;
+      return '<tr style="background:'+(i%2?'#f9f9f9':'#fff')+'"><td style="padding:4px 6px;">'+fmtDate(e.data)+'</td>'
+        +'<td style="font-weight:700;">'+e.lote+'</td><td>'+e.fruta+'</td>'
+        +'<td style="text-align:center;">'+e.quantidade+'</td>'
+        +'<td style="text-align:center;font-weight:700;color:#10b981;">'+(e.total_kg||0).toFixed(0)+' kg</td>'
+        +'<td style="text-align:center;">'+sd+'</td>'
+        +'<td><span style="background:'+(sd>0?'#d1fae5':'#fee2e2')+';color:'+(sd>0?'#065f46':'#991b1b')+';padding:1px 5px;border-radius:6px;font-size:9px;">'+(sd>0?'Disponível':'Zerado')+'</span></td>'
+        +'</tr>';
+    }).join('')+'</tbody></table>';
+
+  abrirJanelaImpressao('Fornecedor — '+forn.nome, corpo);
+}
+
+function imprimirRelatorioPedidos() {
+  var ini    = (document.getElementById('rel-ped-ini')||{}).value||'';
+  var fim    = (document.getElementById('rel-ped-fim')||{}).value||'';
+  var cliId  = (document.getElementById('rel-ped-cli')||{}).value||'';
+  var status = (document.getElementById('rel-ped-status')||{}).value||'';
+
+  var lista = DB.pedidos.filter(function(p){
+    if(ini && p.data_pedido<ini) return false;
+    if(fim && p.data_pedido>fim) return false;
+    if(cliId && p.cliente_id!==cliId) return false;
+    if(status && p.status!==status) return false;
+    return true;
+  });
+
+  var totalCx = lista.reduce(function(s,p){return s+p.quantidade;},0);
+  var totalVal = lista.reduce(function(s,p){return s+(p.valor||0)*p.quantidade;},0);
+
+  var corpo = '<div style="font-size:16px;font-weight:800;margin-bottom:10px;">📋 Relatório de Pedidos'+(ini||fim?' ('+fmtDate(ini)+' a '+fmtDate(fim)+')':'')+'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">'
+    +'<div style="border:1px solid #eee;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:9px;color:#888;">PEDIDOS</div><div style="font-size:18px;font-weight:800;color:#f97316;">'+lista.length+'</div></div>'
+    +'<div style="border:1px solid #eee;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:9px;color:#888;">TOTAL CAIXAS</div><div style="font-size:18px;font-weight:800;">'+totalCx+'</div></div>'
+    +'<div style="border:1px solid #eee;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:9px;color:#888;">VALOR TOTAL</div><div style="font-size:18px;font-weight:800;color:#10b981;">'+fmtMoney(totalVal)+'</div></div>'
+    +'</div>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:10px;">'
+    +'<thead><tr style="background:#f97316;color:#fff;"><th style="padding:5px 7px;text-align:left;">Cliente</th><th>Pedido</th><th>Entrega</th><th>Fruta</th><th>Cx</th><th>Valor</th><th>Status</th></tr></thead><tbody>'
+    +lista.map(function(p,i){
+      return '<tr style="background:'+(i%2?'#f9f9f9':'#fff')+'"><td style="padding:4px 6px;font-weight:700;">'+p.cliente_nome+'</td>'
+        +'<td>'+fmtDate(p.data_pedido)+'</td>'
+        +'<td>'+fmtDate(p.data_entrega)+'</td>'
+        +'<td>'+p.fruta+'</td>'
+        +'<td style="text-align:center;font-weight:700;">'+p.quantidade+'</td>'
+        +'<td>'+fmtMoney((p.valor||0)*p.quantidade)+'</td>'
+        +'<td><span style="background:'+(p.status==='Atendido'?'#d1fae5':'#fef3c7')+';color:'+(p.status==='Atendido'?'#065f46':'#92400e')+';padding:1px 5px;border-radius:6px;font-size:9px;">'+p.status+'</span></td></tr>';
+    }).join('')+'</tbody></table>';
+
+  abrirJanelaImpressao('Pedidos', corpo);
+}
+
+function imprimirRelatorioVendas() {
+  var ini   = (document.getElementById('rel-ven-ini')||{}).value||'';
+  var fim   = (document.getElementById('rel-ven-fim')||{}).value||'';
+  var cliId = (document.getElementById('rel-ven-cli')||{}).value||'';
+
+  var lista = DB.vendas.filter(function(v){
+    if(ini && v.data<ini) return false;
+    if(fim && v.data>fim) return false;
+    if(cliId && v.cliente_id!==cliId) return false;
+    return true;
+  });
+
+  var totalVal = lista.reduce(function(s,v){return s+(v.valor||0);},0);
+  var totalCx  = lista.reduce(function(s,v){return s+(v.quantidade||0);},0);
+
+  var corpo = '<div style="font-size:16px;font-weight:800;margin-bottom:10px;">💰 Relatório de Vendas'+(ini||fim?' ('+fmtDate(ini)+' a '+fmtDate(fim)+')':'')+'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">'
+    +'<div style="border:1px solid #eee;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:9px;color:#888;">VENDAS</div><div style="font-size:18px;font-weight:800;color:#f97316;">'+lista.length+'</div></div>'
+    +'<div style="border:1px solid #eee;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:9px;color:#888;">CAIXAS</div><div style="font-size:18px;font-weight:800;">'+totalCx+'</div></div>'
+    +'<div style="border:1px solid #eee;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:9px;color:#888;">VALOR TOTAL</div><div style="font-size:18px;font-weight:800;color:#10b981;">'+fmtMoney(totalVal)+'</div></div>'
+    +'</div>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:10px;">'
+    +'<thead><tr style="background:#10b981;color:#fff;"><th style="padding:5px 7px;text-align:left;">Data</th><th>Cliente</th><th>Fruta</th><th>Cx</th><th>Valor</th></tr></thead><tbody>'
+    +lista.map(function(v,i){
+      var cli=DB.clientes.find(function(c){return c.id===v.cliente_id;})||{nome:v.cliente||'—'};
+      return '<tr style="background:'+(i%2?'#f9f9f9':'#fff')+'"><td style="padding:4px 6px;">'+fmtDate(v.data)+'</td>'
+        +'<td style="font-weight:700;">'+cli.nome+'</td>'
+        +'<td>'+(v.fruta||'—')+'</td>'
+        +'<td style="text-align:center;">'+( v.quantidade||0)+'</td>'
+        +'<td style="font-weight:700;color:#10b981;">'+fmtMoney(v.valor||0)+'</td></tr>';
+    }).join('')+'</tbody></table>';
+
+  abrirJanelaImpressao('Vendas', corpo);
 }
 
 </script>
