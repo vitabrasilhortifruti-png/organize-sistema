@@ -1042,7 +1042,7 @@ function renderEntrada() {
       <div><label class="lbl">Lote (vazio = automático)</label><input class="inp" id="en-lote" placeholder="LT-AUTO"></div>
       <div><label class="lbl">Fruta</label><select class="inp" id="en-fruta"><option value="">Selecione</option>${FRUTAS.map(f=>`<option>${f}</option>`).join('')}<option value="__nova">+ Nova fruta</option></select></div>
       <div id="en-fruta-nova-wrap" style="display:none;"><label class="lbl">Nova fruta</label><input class="inp" id="en-fruta-nova" placeholder="Nome da fruta"></div>
-      <div><label class="lbl">Fornecedor</label><select class="inp" id="en-forn"><option value="">Selecione</option>${DB.fornecedores.map(f=>`<option value="${f.id}">${f.nome}</option>`).join('')}</select></div>
+      <div><label class="lbl">Fornecedor</label><select class="inp" id="en-forn"><option value="">Selecione</option>${[...DB.fornecedores].sort(function(a,b){return a.nome.localeCompare(b.nome);}).map(f=>`<option value="${f.id}">${f.nome}</option>`).join('')}</select></div>
       <div><label class="lbl">Data</label><input class="inp" id="en-data" type="date" value="${today()}"></div>
     </div>
     <div style="margin-bottom:12px;"><label class="lbl">Tipo</label>
@@ -1078,7 +1078,7 @@ function renderEntrada() {
       <input class="inp" id="ent-f-fim" type="date" style="max-width:140px;" oninput="filtrarEntradas()">
       <select class="inp" id="ent-f-forn" style="max-width:160px;" onchange="filtrarEntradas()">
         <option value="">Todos fornecedores</option>
-        ${DB.fornecedores.map(f=>`<option value="${f.id}">${f.nome}</option>`).join('')}
+        ${[...DB.fornecedores].sort(function(a,b){return a.nome.localeCompare(b.nome);}).map(f=>`<option value="${f.id}">${f.nome}</option>`).join('')}
       </select>
       <select class="inp" id="ent-f-fruta" style="max-width:130px;" onchange="filtrarEntradas()">
         <option value="">Todas frutas</option>
@@ -1304,7 +1304,7 @@ function atualizarBancasCalibres() {
 
 function renderPedidos() {
   var frutaOpts = FRUTAS.map(function(f){return '<option>'+f+'</option>';}).join('');
-  var cliOpts = DB.clientes.map(function(c){return `<option value="${c.id}">${c.nome}</option>`;}).join('');
+  var cliOpts = [...DB.clientes].sort(function(a,b){return a.nome.localeCompare(b.nome);}).map(function(c){return `<option value="${c.id}">${c.nome}</option>`;}).join('');
   var mercOpts = DB.produtos.map(function(p){return `<option value="${p.id}" data-peso="${p.peso}">${p.codigo} - ${p.nome}</option>`;}).join('');
   var bancasHtml = (typeof BANCAS_LISTA!=='undefined'?BANCAS_LISTA:[]).map(function(b){return `<label class="chk-lbl"><input type="checkbox" value="${b}" class="banca-cb"> ${b}</label>`;}).join('');
 
@@ -1732,7 +1732,7 @@ async function modalEditarPedido(id) {
   }
 
   window._editPedidoId = p.id;
-  var cliOpts = DB.clientes.map(function(c){
+  var cliOpts = [...DB.clientes].sort(function(a,b){return a.nome.localeCompare(b.nome);}).map(function(c){
     return '<option value="'+c.id+'"'+(c.id===p.cliente_id?' selected':'')+'>'+c.nome+'</option>';
   }).join('');
   var mercOpts = DB.produtos.map(function(m){
@@ -2226,7 +2226,7 @@ function renderVendas() {
   <div class="card" style="margin-bottom:16px;">
     <div class="section-title"><i data-lucide="plus" style="width:16px;height:16px;"></i> Registrar Venda Manual</div>
     <div class="frow">
-      <div><label class="lbl">Cliente</label><select class="inp" id="v-cli"><option value="">Selecione</option>${DB.clientes.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')}</select></div>
+      <div><label class="lbl">Cliente</label><select class="inp" id="v-cli"><option value="">Selecione</option>${[...DB.clientes].sort(function(a,b){return a.nome.localeCompare(b.nome);}).map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')}</select></div>
       <div><label class="lbl">Fruta</label><select class="inp" id="v-fruta"><option value="">Selecione</option>${FRUTAS.map(f=>`<option>${f}</option>`).join('')}</select></div>
       <div><label class="lbl">Qtd (kg)</label><input class="inp" id="v-qtd" type="number" step="0.01" placeholder="0"></div>
       <div><label class="lbl">Valor Total (R$)</label><input class="inp" id="v-valor" type="number" step="0.01" placeholder="0,00"></div>
@@ -2296,41 +2296,66 @@ async function delVenda(id) {
 // ═══════════════════════════════════════════════════════
 let tabCaixa='retornos';
 function renderCaixas() {
-  var cliOpts=DB.clientes.map(function(c){return '<option value="'+c.id+'">'+c.nome+'</option>';}).join('');
+  var cliOpts=[...DB.clientes].sort(function(a,b){return a.nome.localeCompare(b.nome);}).map(function(c){return '<option value="'+c.id+'">'+c.nome+'</option>';}).join('');
   var marcas=new Set();
   (DB.retornos_caixa||[]).forEach(function(r){if(r.marca)marcas.add(r.marca);});
   (DB.saidas_caixa||[]).forEach(function(s){if(s.marca)marcas.add(s.marca);});
-  var marcaOpts=Array.from(marcas).sort().map(function(m){return '<option>'+m+'</option>';}).join('');
+  var marcaOpts=[''].concat(Array.from(marcas).sort()).map(function(m){return '<option'+(m?'':' value=""')+'>'+m+'</option>';}).join('');
 
   document.getElementById('content').innerHTML=
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">'
-    +'<div class="card"><div class="section-title" style="color:var(--green);">⬇️ Retorno de Caixas</div>'
-    +'<div style="margin-bottom:8px;"><label class="lbl">Cliente *</label><select class="inp" id="ret-cli"><option value="">Selecione</option>'+cliOpts+'</select></div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
-    +'<div><label class="lbl">Data *</label><input class="inp" id="ret-data" type="date" value="'+today()+'"></div>'
-    +'<div><label class="lbl">Marca</label><div style="display:flex;gap:4px;"><select class="inp" id="ret-marca" style="flex:1;"><option value="">Selecione</option>'+marcaOpts+'</select>'
-    +'<button class="btn btn-s btn-sm" onclick="novaMarcaCaixa()" title="Nova marca">+</button></div></div>'
+
+    // ── RETORNO ──────────────────────────────────────────
+    +'<div class="card">'
+    +'<div class="section-title" style="color:var(--green);">⬇️ Retorno de Caixas</div>'
+    +'<div style="margin-bottom:8px;"><label class="lbl">Cliente *</label>'
+    +'<select class="inp" id="ret-cli"><option value="">Selecione</option>'+cliOpts+'</select></div>'
+    +'<div style="margin-bottom:8px;"><label class="lbl">Data *</label>'
+    +'<input class="inp" id="ret-data" type="date" value="'+today()+'"></div>'
+    +'<div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:6px;">Marcas e Quantidades:</div>'
+    +'<div id="ret-itens">'
+    +'<div class="cx-item-row" style="display:grid;grid-template-columns:1fr 80px 80px 30px;gap:6px;margin-bottom:6px;">'
+    +'<select class="inp cx-marca" style="font-size:11px;"><option value="">Sem marca</option>'+marcaOpts+'</select>'
+    +'<input class="inp cx-qtd" type="number" min="0" placeholder="Cx" style="font-size:11px;">'
+    +'<input class="inp cx-pal" type="number" min="0" placeholder="Pal" style="font-size:11px;">'
+    +'<span></span>'
     +'</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
-    +'<div><label class="lbl">Caixas *</label><input class="inp" id="ret-qtd" type="number" min="0" placeholder="0"></div>'
-    +'<div><label class="lbl">Paletes</label><input class="inp" id="ret-pal" type="number" min="0" placeholder="0"></div>'
     +'</div>'
-    +'<div style="margin-bottom:8px;"><label class="lbl">Obs</label><input class="inp" id="ret-obs" placeholder="Opcional"></div>'
-    +'<button class="btn btn-g" onclick="addRetornoCaixa()">⬇️ Registrar Retorno</button></div>'
-    +'<div class="card"><div class="section-title" style="color:var(--accent);">⬆️ Saída de Caixas</div>'
-    +'<div style="margin-bottom:8px;"><label class="lbl">Cliente *</label><select class="inp" id="sai-cli"><option value="">Selecione</option>'+cliOpts+'</select></div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
-    +'<div><label class="lbl">Data *</label><input class="inp" id="sai-data" type="date" value="'+today()+'"></div>'
-    +'<div><label class="lbl">Marca</label><div style="display:flex;gap:4px;"><select class="inp" id="sai-marca" style="flex:1;"><option value="">Selecione</option>'+marcaOpts+'</select>'
-    +'<button class="btn btn-s btn-sm" onclick="novaMarcaCaixa()" title="Nova marca">+</button></div></div>'
+    +'<button class="btn btn-s btn-sm" style="margin-bottom:8px;" onclick="addLinhaRet()">+ Linha</button>'
+    +'<div style="margin-bottom:8px;"><label class="lbl">Obs Geral</label>'
+    +'<input class="inp" id="ret-obs" placeholder="Opcional"></div>'
+    +'<button class="btn btn-g" onclick="addRetornoCaixa()">⬇️ Registrar Retorno</button>'
     +'</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
-    +'<div><label class="lbl">Caixas *</label><input class="inp" id="sai-qtd" type="number" min="0" placeholder="0"></div>'
-    +'<div><label class="lbl">Paletes</label><input class="inp" id="sai-pal" type="number" min="0" placeholder="0"></div>'
+
+    // ── SAÍDA ─────────────────────────────────────────────
+    +'<div class="card">'
+    +'<div class="section-title" style="color:var(--accent);">⬆️ Saída de Caixas</div>'
+    +'<div style="margin-bottom:8px;"><label class="lbl">Cliente *</label>'
+    +'<select class="inp" id="sai-cli"><option value="">Selecione</option>'+cliOpts+'</select></div>'
+    +'<div style="margin-bottom:8px;"><label class="lbl">Data *</label>'
+    +'<input class="inp" id="sai-data" type="date" value="'+today()+'"></div>'
+    +'<div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:6px;">Marcas e Quantidades:</div>'
+    +'<div id="sai-itens">'
+    +'<div class="cx-item-row" style="display:grid;grid-template-columns:1fr 80px 80px 30px;gap:6px;margin-bottom:6px;">'
+    +'<select class="inp cx-marca" style="font-size:11px;"><option value="">Sem marca</option>'+marcaOpts+'</select>'
+    +'<input class="inp cx-qtd" type="number" min="0" placeholder="Cx" style="font-size:11px;">'
+    +'<input class="inp cx-pal" type="number" min="0" placeholder="Pal" style="font-size:11px;">'
+    +'<span></span>'
     +'</div>'
-    +'<div style="margin-bottom:8px;"><label class="lbl">Obs</label><input class="inp" id="sai-obs" placeholder="Opcional"></div>'
-    +'<button class="btn btn-r" onclick="addSaidaCaixa()">⬆️ Registrar Saída</button></div>'
     +'</div>'
+    +'<button class="btn btn-s btn-sm" style="margin-bottom:8px;" onclick="addLinhaSai()">+ Linha</button>'
+    +'<div style="margin-bottom:8px;"><label class="lbl">Nova marca</label>'
+    +'<div style="display:flex;gap:4px;">'
+    +'<input class="inp" id="cx-nova-marca" placeholder="Ex: BRASILAIR" style="flex:1;">'
+    +'<button class="btn btn-s btn-sm" onclick="novaMarcaCaixa()">+ Adicionar</button>'
+    +'</div></div>'
+    +'<div style="margin-bottom:8px;"><label class="lbl">Obs Geral</label>'
+    +'<input class="inp" id="sai-obs" placeholder="Opcional"></div>'
+    +'<button class="btn btn-r" onclick="addSaidaCaixa()">⬆️ Registrar Saída</button>'
+    +'</div>'
+    +'</div>'
+
+    // ── FILTROS ───────────────────────────────────────────
     +'<div class="card" style="margin-bottom:12px;">'
     +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'
     +'<select class="inp" id="cx-f-cli" style="max-width:180px;" onchange="renderCaixasFiltrado()"><option value="">Todos clientes</option>'+cliOpts+'</select>'
@@ -2347,13 +2372,57 @@ function renderCaixas() {
   renderCaixasFiltrado();
 }
 
+function getMarcaOpts() {
+  var marcas = new Set();
+  (DB.retornos_caixa||[]).forEach(function(r){if(r.marca)marcas.add(r.marca);});
+  (DB.saidas_caixa||[]).forEach(function(s){if(s.marca)marcas.add(s.marca);});
+  return '<option value="">Sem marca</option>'+Array.from(marcas).sort().map(function(m){return '<option>'+m+'</option>';}).join('');
+}
+
+function addLinhaRet() {
+  var div = document.createElement('div');
+  div.className = 'cx-item-row';
+  div.style.cssText = 'display:grid;grid-template-columns:1fr 80px 80px 30px;gap:6px;margin-bottom:6px;';
+  div.innerHTML = '<select class="inp cx-marca" style="font-size:11px;">'+getMarcaOpts()+'</select>'
+    +'<input class="inp cx-qtd" type="number" min="0" placeholder="Cx" style="font-size:11px;">'
+    +'<input class="inp cx-pal" type="number" min="0" placeholder="Pal" style="font-size:11px;">'
+    +'<button class="btn btn-r btn-sm" onclick="this.parentElement.remove()" style="padding:4px 6px;">✕</button>';
+  document.getElementById('ret-itens').appendChild(div);
+}
+
+function addLinhaSai() {
+  var div = document.createElement('div');
+  div.className = 'cx-item-row';
+  div.style.cssText = 'display:grid;grid-template-columns:1fr 80px 80px 30px;gap:6px;margin-bottom:6px;';
+  div.innerHTML = '<select class="inp cx-marca" style="font-size:11px;">'+getMarcaOpts()+'</select>'
+    +'<input class="inp cx-qtd" type="number" min="0" placeholder="Cx" style="font-size:11px;">'
+    +'<input class="inp cx-pal" type="number" min="0" placeholder="Pal" style="font-size:11px;">'
+    +'<button class="btn btn-r btn-sm" onclick="this.parentElement.remove()" style="padding:4px 6px;">✕</button>';
+  document.getElementById('sai-itens').appendChild(div);
+}
+
+function novaMarcaCaixa() {
+  var nova = (document.getElementById('cx-nova-marca')||{}).value||'';
+  if(!nova.trim()) return toast('Informe o nome da marca','err');
+  nova = nova.trim().toUpperCase();
+  // Add to all marca selects on page
+  document.querySelectorAll('.cx-marca, #cx-f-marca').forEach(function(sel){
+    var opt = document.createElement('option');
+    opt.value = nova; opt.textContent = nova;
+    sel.appendChild(opt);
+  });
+  if(document.getElementById('cx-nova-marca')) document.getElementById('cx-nova-marca').value='';
+  toast('✅ Marca "'+nova+'" adicionada!');
+}
+
+
 function switchCaixa(tab){ tabCaixa=tab; renderCaixas(); }
 function renderCaixaTab() {
   const div=document.getElementById('caixa-content');
   if(tabCaixa==='retornos') {
     div.innerHTML=`<div class="grid2">
     <div class="card"><div class="section-title">Registrar Retorno</div>
-      <div style="margin-bottom:10px;"><label class="lbl">Cliente</label><select class="inp" id="ret-cli"><option value="">Selecione</option>${DB.clientes.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')}</select></div>
+      <div style="margin-bottom:10px;"><label class="lbl">Cliente</label><select class="inp" id="ret-cli"><option value="">Selecione</option>${[...DB.clientes].sort(function(a,b){return a.nome.localeCompare(b.nome);}).map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')}</select></div>
       <div class="frow"><div><label class="lbl">Data</label><input class="inp" id="ret-data" type="date" value="${today()}"></div><div><label class="lbl">Quantidade</label><input class="inp" id="ret-qtd" type="number" placeholder="0"></div></div>
       <div style="margin-bottom:10px;"><label class="lbl">Marca</label><select class="inp" id="ret-marca"><option value="">Selecione</option>${MARCAS_CAIXA.map(m=>`<option value="${m.nome}">${m.nome} (${m.tamanho})</option>`).join('')}</select></div>
       <div style="margin-bottom:10px;"><label class="lbl">Obs</label><input class="inp" id="ret-obs" placeholder="Estado das caixas..."></div>
@@ -2371,7 +2440,7 @@ function renderCaixaTab() {
   } else if(tabCaixa==='saidas') {
     div.innerHTML=`<div class="grid2">
     <div class="card"><div class="section-title">Registrar Saída</div>
-      <div style="margin-bottom:10px;"><label class="lbl">Cliente</label><select class="inp" id="sai-cli"><option value="">Selecione</option>${DB.clientes.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')}</select></div>
+      <div style="margin-bottom:10px;"><label class="lbl">Cliente</label><select class="inp" id="sai-cli"><option value="">Selecione</option>${[...DB.clientes].sort(function(a,b){return a.nome.localeCompare(b.nome);}).map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')}</select></div>
       <div class="frow"><div><label class="lbl">Data</label><input class="inp" id="sai-data" type="date" value="${today()}"></div><div><label class="lbl">Quantidade</label><input class="inp" id="sai-qtd" type="number" placeholder="0"></div></div>
       <div style="margin-bottom:10px;"><label class="lbl">Marca</label><select class="inp" id="sai-marca"><option value="">Selecione</option>${MARCAS_CAIXA.map(m=>`<option value="${m.nome}">${m.nome} (${m.tamanho})</option>`).join('')}</select></div>
       <div style="margin-bottom:10px;"><label class="lbl">Obs</label><input class="inp" id="sai-obs" placeholder="Detalhes..."></div>
@@ -2498,7 +2567,7 @@ function renderFinanceiro() {
       <label style="font-size:11px;color:var(--sub);">Cliente:</label>
       <select class="inp" id="fin-cli" style="max-width:180px;" onchange="renderFinanceiro()">
         <option value="">Todos</option>
-        ${DB.clientes.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')}
+        ${[...DB.clientes].sort(function(a,b){return a.nome.localeCompare(b.nome);}).map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')}
       </select>
       <button class="btn btn-s btn-sm" onclick="document.getElementById('fin-dt-ini').value='';document.getElementById('fin-dt-fim').value='';renderFinanceiro()">✕ Limpar</button>
       <button class="btn btn-p btn-sm" onclick="imprimirRelatorio()">🖨️ Imprimir</button>
@@ -2526,7 +2595,7 @@ function renderFinanceiro() {
   <div class="grid2">
     <div class="card" style="margin-bottom:0;">
       <div class="section-title">Registrar Pagamento</div>
-      <div style="margin-bottom:10px;"><label class="lbl">Cliente</label><select class="inp" id="pag-cli"><option value="">Selecione</option>${DB.clientes.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')}</select></div>
+      <div style="margin-bottom:10px;"><label class="lbl">Cliente</label><select class="inp" id="pag-cli"><option value="">Selecione</option>${[...DB.clientes].sort(function(a,b){return a.nome.localeCompare(b.nome);}).map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')}</select></div>
       <div class="frow"><div><label class="lbl">Valor (R$)</label><input class="inp" id="pag-valor" type="number" step="0.01" placeholder="0,00"></div>
       <div><label class="lbl">Data</label><input class="inp" id="pag-data" type="date" value="${today()}"></div></div>
       <div style="margin-bottom:10px;"><label class="lbl">Forma</label><select class="inp" id="pag-forma"><option value="">Selecione</option><option>Dinheiro</option><option>PIX</option><option>Cartão Débito</option><option>Cartão Crédito</option><option>Transferência</option><option>Boleto</option></select></div>
@@ -2589,8 +2658,8 @@ async function delPagamento(id) {
 // RELATÓRIOS
 // ═══════════════════════════════════════════════════════
 function renderRelatorios() {
-  var cliOpts = DB.clientes.map(function(c){return '<option value="'+c.id+'">'+c.nome+'</option>';}).join('');
-  var fornOpts = DB.fornecedores.map(function(f){return '<option value="'+f.id+'">'+f.nome+'</option>';}).join('');
+  var cliOpts = [...DB.clientes].sort(function(a,b){return a.nome.localeCompare(b.nome);}).map(function(c){return '<option value="'+c.id+'">'+c.nome+'</option>';}).join('');
+  var fornOpts = [...DB.fornecedores].sort(function(a,b){return a.nome.localeCompare(b.nome);}).map(function(f){return '<option value="'+f.id+'">'+f.nome+'</option>';}).join('');
 
   document.getElementById('content').innerHTML =
     '<div class="section-title" style="margin-bottom:14px;">📊 Relatórios</div>'
@@ -5070,39 +5139,49 @@ async function lancarPagamentoPedido(chave) {
 async function addRetornoCaixa() {
   var cliId = (document.getElementById('ret-cli')||{}).value||'';
   var data  = (document.getElementById('ret-data')||{}).value||'';
-  var marca = (document.getElementById('ret-marca')||{}).value||'';
-  var qtd   = parseInt((document.getElementById('ret-qtd')||{}).value)||0;
-  var pal   = parseInt((document.getElementById('ret-pal')||{}).value)||0;
   var obs   = (document.getElementById('ret-obs')||{}).value||'';
   if(!cliId) return toast('Selecione o cliente','err');
   if(!data)  return toast('Informe a data','err');
-  if(qtd<=0) return toast('Informe a quantidade de caixas','err');
-  var res = await POST('/api/retornos_caixa', {id:uid(),cliente_id:cliId,data:data,quantidade:qtd,paletes:pal,marca:marca,obs:obs});
-  if(res) {
-    if(!DB.retornos_caixa) DB.retornos_caixa = [];
-    DB.retornos_caixa.unshift(res);
-    toast('✅ Retorno de '+qtd+' cx registrado!');
-    renderCaixas();
+  var rows = document.querySelectorAll('#ret-itens .cx-item-row');
+  var itens = [];
+  rows.forEach(function(row){
+    var marca = (row.querySelector('.cx-marca')||{}).value||'';
+    var qtd   = parseInt((row.querySelector('.cx-qtd')||{}).value)||0;
+    var pal   = parseInt((row.querySelector('.cx-pal')||{}).value)||0;
+    if(qtd>0) itens.push({marca,qtd,pal});
+  });
+  if(!itens.length) return toast('Informe ao menos uma quantidade','err');
+  var totalCx=0;
+  for(var i=0;i<itens.length;i++){
+    var it=itens[i];
+    var res = await POST('/api/retornos_caixa', {id:uid(),cliente_id:cliId,data,quantidade:it.qtd,paletes:it.pal,marca:it.marca,obs:obs});
+    if(res){ if(!DB.retornos_caixa)DB.retornos_caixa=[]; DB.retornos_caixa.unshift(res); totalCx+=it.qtd; }
   }
+  if(totalCx>0) { toast('✅ Retorno de '+totalCx+' cx em '+itens.length+' marca(s) registrado!'); renderCaixas(); }
 }
 
 async function addSaidaCaixa() {
   var cliId = (document.getElementById('sai-cli')||{}).value||'';
   var data  = (document.getElementById('sai-data')||{}).value||'';
-  var marca = (document.getElementById('sai-marca')||{}).value||'';
-  var qtd   = parseInt((document.getElementById('sai-qtd')||{}).value)||0;
-  var pal   = parseInt((document.getElementById('sai-pal')||{}).value)||0;
   var obs   = (document.getElementById('sai-obs')||{}).value||'';
   if(!cliId) return toast('Selecione o cliente','err');
   if(!data)  return toast('Informe a data','err');
-  if(qtd<=0) return toast('Informe a quantidade de caixas','err');
-  var res = await POST('/api/saidas_caixa', {id:uid(),cliente_id:cliId,data:data,quantidade:qtd,paletes:pal,marca:marca,obs:obs});
-  if(res) {
-    if(!DB.saidas_caixa) DB.saidas_caixa = [];
-    DB.saidas_caixa.unshift(res);
-    toast('✅ Saída de '+qtd+' cx registrada!');
-    renderCaixas();
+  var rows = document.querySelectorAll('#sai-itens .cx-item-row');
+  var itens = [];
+  rows.forEach(function(row){
+    var marca = (row.querySelector('.cx-marca')||{}).value||'';
+    var qtd   = parseInt((row.querySelector('.cx-qtd')||{}).value)||0;
+    var pal   = parseInt((row.querySelector('.cx-pal')||{}).value)||0;
+    if(qtd>0) itens.push({marca,qtd,pal});
+  });
+  if(!itens.length) return toast('Informe ao menos uma quantidade','err');
+  var totalCx=0;
+  for(var i=0;i<itens.length;i++){
+    var it=itens[i];
+    var res = await POST('/api/saidas_caixa', {id:uid(),cliente_id:cliId,data,quantidade:it.qtd,paletes:it.pal,marca:it.marca,obs:obs});
+    if(res){ if(!DB.saidas_caixa)DB.saidas_caixa=[]; DB.saidas_caixa.unshift(res); totalCx+=it.qtd; }
   }
+  if(totalCx>0) { toast('✅ Saída de '+totalCx+' cx em '+itens.length+' marca(s) registrada!'); renderCaixas(); }
 }
 
 
