@@ -13,6 +13,7 @@
 <title>Organize - Consultoria Operacional</title>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <style>
 
 *{box-sizing:border-box;margin:0;padding:0;font-family:'Sora',sans-serif;}
@@ -217,6 +218,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1) brightnes
       <button class="nb" onclick="goTo('estoque')">📈 Estoque</button>
       <button class="nb" onclick="goTo('financeiro')">💳 Financeiro</button>
       <button class="nb" onclick="goTo('relatorios')">🗂️ Relatórios</button>
+      <button class="nb" onclick="goTo('insumos')">🧺 Insumos</button>
       <button class="nb" onclick="goTo('backup')">💾 Backup</button>
       <button class="nb" onclick="goTo('empresa')">🏢 Empresa</button>
     </nav>
@@ -276,13 +278,14 @@ function setOnline() {
 // CARREGAR TODOS OS DADOS DO SERVIDOR
 // ═══════════════════════════════════════════════════════
 async function loadAllData() {
-  const [empresa, produtos, fornecedores, clientes, entradas, pedidos,
+  const [empresa, produtos, fornecedores, clientes, insumos, entradas, pedidos,
          romaneios, vendas, retornos_caixa, saidas_caixa, pagamentos, descartes] =
     await Promise.all([
       GET('/api/empresa'),
       GET('/api/produtos'),
       GET('/api/fornecedores'),
       GET('/api/clientes'),
+      GET('/api/insumos'),
       GET('/api/entradas'),
       GET('/api/pedidos'),
       GET('/api/romaneios'),
@@ -298,6 +301,7 @@ async function loadAllData() {
     produtos:      produtos || [],
     fornecedores:  fornecedores || [],
     clientes:      clientes || [],
+    insumos:       insumos || [],
     entradas:      entradas || [],
     pedidos:       pedidos || [],
     romaneios:     romaneios || [],
@@ -488,7 +492,7 @@ function goTo(page) {
   const renders = {
     dashboard:renderDashboard, empresa:renderEmpresa, produtos:renderProdutos,
     cadastros:renderCadastros, entrada:renderEntrada, pedidos:renderPedidos,
-    romaneio:function(){loadAllData().then(renderRomaneio);}, vendas:renderVendas, caixas:renderCaixas,
+    romaneio:function(){loadAllData().then(renderRomaneio);}, insumos:renderInsumos, vendas:renderVendas, caixas:renderCaixas,
     estoque:renderEstoque, financeiro:renderFinanceiro, relatorios:renderRelatorios,
     backup:renderBackupPage
   };
@@ -622,6 +626,14 @@ function renderDashboard() {
 
   // Pendentes/atrasados alert
   var alertHtml = '';
+  // Insumos abaixo do mínimo
+  var insAbaixo = (DB.insumos||[]).filter(function(ins){ return ins.quantidade_atual < ins.quantidade_minima; });
+  if(insAbaixo.length > 0) {
+    alertHtml += '<div style="padding:8px 12px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">'
+      +'<span style="font-size:12px;color:var(--red);font-weight:700;">🧺 '+insAbaixo.length+' insumo(s) ABAIXO DO MÍNIMO: '+insAbaixo.map(function(i){return i.nome+' ('+i.quantidade_atual+' '+i.unidade+')';}).join(', ')+'</span>'
+      +'<button class="btn btn-sm" style="background:rgba(239,68,68,.2);border:1px solid var(--red);color:var(--red);font-size:10px;" data-page="insumos" onclick="goTo(this.dataset.page)">Ver Insumos</button>'
+      +'</div>';
+  }
   if(pedAtrasados>0) {
     alertHtml += '<div style="padding:8px 12px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">'
       +'<span style="font-size:12px;color:var(--red);font-weight:700;">⚠️ '+pedAtrasados+' pedido(s) ATRASADO(S)!</span>'
@@ -2596,7 +2608,10 @@ function renderRelatorios() {
     +'<div><label class="lbl">Data fim</label><input class="inp" id="rel-cli-fim" type="date"></div>'
     +'</div>'
     +'<div style="color:var(--muted);font-size:10px;margin-bottom:10px;">Inclui: pedidos, vendas, pagamentos, caixas, saldo devedor</div>'
-    +'<button class="btn btn-p" onclick="imprimirRelatorioCliente()">🖨️ Gerar Relatório</button>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+    +'<button class="btn btn-p" onclick="imprimirRelatorioCliente()">🖨️ Imprimir PDF</button>'
+    +'<button class="btn btn-g btn-sm" onclick="exportarExcelCliente()">📊 Excel</button>'
+    +'</div>'
     +'</div>'
 
     // RELATÓRIO POR FORNECEDOR
@@ -2609,7 +2624,10 @@ function renderRelatorios() {
     +'<div><label class="lbl">Data fim</label><input class="inp" id="rel-forn-fim" type="date"></div>'
     +'</div>'
     +'<div style="color:var(--muted);font-size:10px;margin-bottom:10px;">Inclui: todas entradas, lotes, KG recebido, valor total</div>'
-    +'<button class="btn btn-g" onclick="imprimirRelatorioFornecedor()">🖨️ Gerar Relatório</button>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+    +'<button class="btn btn-g" onclick="imprimirRelatorioFornecedor()">🖨️ Imprimir PDF</button>'
+    +'<button class="btn btn-g btn-sm" onclick="exportarExcelFornecedor()">📊 Excel</button>'
+    +'</div>'
     +'</div>'
     +'</div>'
 
@@ -2627,7 +2645,10 @@ function renderRelatorios() {
     +'<select class="inp" id="rel-ped-cli"><option value="">Todos</option>'+cliOpts+'</select></div>'
     +'<div style="margin-bottom:8px;"><label class="lbl">Status</label>'
     +'<select class="inp" id="rel-ped-status"><option value="">Todos</option><option>Pendente</option><option>Atendido</option></select></div>'
-    +'<button class="btn btn-s" onclick="imprimirRelatorioPedidos()">🖨️ Gerar Relatório</button>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+    +'<button class="btn btn-s" onclick="imprimirRelatorioPedidos()">🖨️ Imprimir PDF</button>'
+    +'<button class="btn btn-g btn-sm" onclick="exportarExcelPedidos()">📊 Excel</button>'
+    +'</div>'
     +'</div>'
 
     // RELATÓRIO DE VENDAS
@@ -2639,7 +2660,10 @@ function renderRelatorios() {
     +'</div>'
     +'<div style="margin-bottom:10px;"><label class="lbl">Cliente (opcional)</label>'
     +'<select class="inp" id="rel-ven-cli"><option value="">Todos</option>'+cliOpts+'</select></div>'
-    +'<button class="btn btn-g" onclick="imprimirRelatorioVendas()">🖨️ Gerar Relatório</button>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+    +'<button class="btn btn-g" onclick="imprimirRelatorioVendas()">🖨️ Imprimir PDF</button>'
+    +'<button class="btn btn-g btn-sm" onclick="exportarExcelVendas()">📊 Excel</button>'
+    +'</div>'
     +'</div>'
     +'</div>'
 
@@ -2655,7 +2679,10 @@ function renderRelatorios() {
     +'<div><label class="lbl">Data início</label><input class="inp" id="rel-ent-ini" type="date"></div>'
     +'<div><label class="lbl">Data fim</label><input class="inp" id="rel-ent-fim" type="date"></div>'
     +'</div>'
-    +'<button class="btn btn-s" onclick="gerarRelEntradas()">🖨️ Gerar Relatório</button>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+    +'<button class="btn btn-s" onclick="gerarRelEntradas()">🖨️ Imprimir PDF</button>'
+    +'<button class="btn btn-g btn-sm" onclick="exportarExcelEntradas()">📊 Excel</button>'
+    +'</div>'
     +'</div>'
 
     // RELATÓRIO DE CAIXAS
@@ -2667,7 +2694,10 @@ function renderRelatorios() {
     +'<div><label class="lbl">Data início</label><input class="inp" id="rel-cx-ini" type="date"></div>'
     +'<div><label class="lbl">Data fim</label><input class="inp" id="rel-cx-fim" type="date"></div>'
     +'</div>'
-    +'<button class="btn btn-s" onclick="gerarRelCaixas()">🖨️ Gerar Relatório</button>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+    +'<button class="btn btn-s" onclick="gerarRelCaixas()">🖨️ Imprimir PDF</button>'
+    +'<button class="btn btn-g btn-sm" onclick="exportarExcelCaixas()">📊 Excel</button>'
+    +'</div>'
     +'</div>'
     +'</div>'
 
@@ -5272,6 +5302,271 @@ function imprimirRelatorioVendas() {
     }).join('')+'</tbody></table>';
 
   abrirJanelaImpressao('Vendas', corpo);
+}
+
+
+// ── EXPORT TO EXCEL ──────────────────────────────────────
+function exportarExcel(dados, nomeArquivo, nomeAba) {
+  if(!dados || dados.length===0) return toast('Nenhum dado para exportar','err');
+  if(typeof XLSX === 'undefined') return toast('Aguarde o carregamento do Excel...','err');
+  var ws = XLSX.utils.json_to_sheet(dados);
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, nomeAba||'Dados');
+  XLSX.writeFile(wb, (nomeArquivo||'relatorio')+'.xlsx');
+  toast('✅ Excel exportado!');
+}
+
+function exportarExcelCliente() {
+  var cliId = (document.getElementById('rel-cli')||{}).value||'';
+  if(!cliId) return toast('Selecione um cliente','err');
+  var cli = DB.clientes.find(function(c){return c.id===cliId;});
+  var ini = (document.getElementById('rel-cli-ini')||{}).value||'';
+  var fim = (document.getElementById('rel-cli-fim')||{}).value||'';
+  var pedidos = DB.pedidos.filter(function(p){
+    if(p.cliente_id!==cliId) return false;
+    if(ini&&p.data_pedido<ini) return false; if(fim&&p.data_pedido>fim) return false;
+    return true;
+  });
+  var dados = pedidos.map(function(p){
+    return {'Data Pedido':fmtDate(p.data_pedido),'Data Entrega':fmtDate(p.data_entrega),
+      'Cliente':p.cliente_nome,'Fruta':p.fruta,'Caixas':p.quantidade,
+      'KG':(p.quantidade_kg||0).toFixed(0),'Valor Unit':p.valor||0,
+      'Total':((p.valor||0)*p.quantidade).toFixed(2),'Status':p.status};
+  });
+  exportarExcel(dados, 'cliente_'+(cli?cli.nome:''), 'Pedidos');
+}
+
+function exportarExcelFornecedor() {
+  var fornId = (document.getElementById('rel-forn')||{}).value||'';
+  if(!fornId) return toast('Selecione um fornecedor','err');
+  var forn = DB.fornecedores.find(function(f){return f.id===fornId;});
+  var ini = (document.getElementById('rel-forn-ini')||{}).value||'';
+  var fim = (document.getElementById('rel-forn-fim')||{}).value||'';
+  var entradas = DB.entradas.filter(function(e){
+    if(e.fornecedor_id!==fornId) return false;
+    if(ini&&e.data<ini) return false; if(fim&&e.data>fim) return false;
+    return true;
+  });
+  var dados = entradas.map(function(e){
+    var fo=DB.fornecedores.find(function(f){return f.id===e.fornecedor_id;})||{nome:'—'};
+    return {'Data':fmtDate(e.data),'Lote':e.lote,'Fruta':e.fruta,'Fornecedor':fo.nome,
+      'Quantidade':e.quantidade,'KG Total':(e.total_kg||0).toFixed(0),
+      'Saldo':(e.quantidade_atual!=null?e.quantidade_atual:e.quantidade),'Status':e.status||'Disponível'};
+  });
+  exportarExcel(dados, 'fornecedor_'+(forn?forn.nome:''), 'Entradas');
+}
+
+function exportarExcelPedidos() {
+  var ini=(document.getElementById('rel-ped-ini')||{}).value||'';
+  var fim=(document.getElementById('rel-ped-fim')||{}).value||'';
+  var cliId=(document.getElementById('rel-ped-cli')||{}).value||'';
+  var status=(document.getElementById('rel-ped-status')||{}).value||'';
+  var lista = DB.pedidos.filter(function(p){
+    if(ini&&p.data_pedido<ini) return false; if(fim&&p.data_pedido>fim) return false;
+    if(cliId&&p.cliente_id!==cliId) return false;
+    if(status&&p.status!==status) return false;
+    return true;
+  });
+  var dados = lista.map(function(p){
+    return {'Data':fmtDate(p.data_pedido),'Entrega':fmtDate(p.data_entrega),
+      'Cliente':p.cliente_nome,'Fruta':p.fruta,'Caixas':p.quantidade,
+      'Paletes':fmtPaletes(p.quantidade),'Valor Unit':p.valor||0,
+      'Total':((p.valor||0)*p.quantidade).toFixed(2),'Bancas':p.bancas||'','Status':p.status};
+  });
+  exportarExcel(dados, 'pedidos', 'Pedidos');
+}
+
+function exportarExcelVendas() {
+  var ini=(document.getElementById('rel-ven-ini')||{}).value||'';
+  var fim=(document.getElementById('rel-ven-fim')||{}).value||'';
+  var cliId=(document.getElementById('rel-ven-cli')||{}).value||'';
+  var lista = DB.vendas.filter(function(v){
+    if(ini&&v.data<ini) return false; if(fim&&v.data>fim) return false;
+    if(cliId&&v.cliente_id!==cliId) return false;
+    return true;
+  });
+  var dados = lista.map(function(v){
+    var cli=DB.clientes.find(function(c){return c.id===v.cliente_id;})||{nome:v.cliente||'—'};
+    return {'Data':fmtDate(v.data),'Cliente':cli.nome,'Fruta':v.fruta||'—',
+      'Caixas':v.quantidade||0,'Valor':v.valor||0};
+  });
+  exportarExcel(dados, 'vendas', 'Vendas');
+}
+
+function exportarExcelEntradas() {
+  var fornId=(document.getElementById('rel-ent-forn')||{}).value||'';
+  var ini=(document.getElementById('rel-ent-ini')||{}).value||'';
+  var fim=(document.getElementById('rel-ent-fim')||{}).value||'';
+  var lista = DB.entradas.filter(function(e){
+    if(fornId&&e.fornecedor_id!==fornId) return false;
+    if(ini&&e.data<ini) return false; if(fim&&e.data>fim) return false;
+    return true;
+  });
+  var dados = lista.map(function(e){
+    var fo=DB.fornecedores.find(function(f){return f.id===e.fornecedor_id;})||{nome:'—'};
+    return {'Data':fmtDate(e.data),'Lote':e.lote,'Fruta':e.fruta,'Fornecedor':fo.nome,
+      'Qtd':e.quantidade,'KG':(e.total_kg||0).toFixed(0),'Saldo':(e.quantidade_atual!=null?e.quantidade_atual:e.quantidade)};
+  });
+  exportarExcel(dados, 'entradas', 'Entradas');
+}
+
+function exportarExcelCaixas() {
+  var cliId=(document.getElementById('rel-cx-cli')||{}).value||'';
+  var ini=(document.getElementById('rel-cx-ini')||{}).value||'';
+  var fim=(document.getElementById('rel-cx-fim')||{}).value||'';
+  var saidas=(DB.saidas_caixa||[]).filter(function(s){
+    if(cliId&&s.cliente_id!==cliId) return false;
+    if(ini&&s.data<ini) return false; if(fim&&s.data>fim) return false; return true;
+  });
+  var retornos=(DB.retornos_caixa||[]).filter(function(r){
+    if(cliId&&r.cliente_id!==cliId) return false;
+    if(ini&&r.data<ini) return false; if(fim&&r.data>fim) return false; return true;
+  });
+  var dados = saidas.map(function(s){
+    var cli=DB.clientes.find(function(c){return c.id===s.cliente_id;})||{nome:'—'};
+    return {'Data':fmtDate(s.data),'Tipo':'Saída','Cliente':cli.nome,'Marca':s.marca||'','Caixas':s.quantidade||0,'Paletes':s.paletes||0,'Obs':s.obs||''};
+  }).concat(retornos.map(function(r){
+    var cli=DB.clientes.find(function(c){return c.id===r.cliente_id;})||{nome:'—'};
+    return {'Data':fmtDate(r.data),'Tipo':'Retorno','Cliente':cli.nome,'Marca':r.marca||'','Caixas':r.quantidade||0,'Paletes':r.paletes||0,'Obs':r.obs||''};
+  })).sort(function(a,b){return b.Data.localeCompare(a.Data);});
+  exportarExcel(dados, 'caixas', 'Caixas');
+}
+
+// ── INSUMOS MODULE ────────────────────────────────────────
+function renderInsumos() {
+  var insList = DB.insumos||[];
+  document.getElementById('content').innerHTML =
+    '<div class="card" style="margin-bottom:12px;">'
+    +'<div class="section-title">🧺 Cadastro de Insumos</div>'
+    +'<div class="frow" style="margin-bottom:10px;">'
+    +'<div><label class="lbl">Nome *</label><input class="inp" id="ins-nome" placeholder="Ex: Saco PP 20kg"></div>'
+    +'<div><label class="lbl">Unidade</label>'
+    +'<select class="inp" id="ins-uni"><option>saco</option><option>caixa</option><option>peça</option><option>kg</option><option>rolo</option><option>unidade</option></select></div>'
+    +'<div><label class="lbl">Estoque Inicial</label><input class="inp" id="ins-qtd" type="number" step="0.01" placeholder="0" value="0"></div>'
+    +'<div><label class="lbl">Estoque Mínimo</label><input class="inp" id="ins-min" type="number" step="0.01" placeholder="0" value="0"></div>'
+    +'<div><label class="lbl">Obs</label><input class="inp" id="ins-obs" placeholder="Opcional"></div>'
+    +'</div>'
+    +'<button class="btn btn-p" onclick="addInsumo()">+ Cadastrar Insumo</button>'
+    +'</div>'
+    +'<div class="card">'
+    +'<div class="section-title" style="margin-bottom:10px;">📦 Insumos Cadastrados</div>'
+    +(insList.length===0?'<div class="empty">Nenhum insumo cadastrado</div>':
+      '<div class="tbl-wrap"><table class="tbl"><thead><tr>'
+      +'<th>Insumo</th><th>Unidade</th><th>Estoque Atual</th><th>Mínimo</th><th>Status</th><th>Ações</th>'
+      +'</tr></thead><tbody>'
+      +insList.map(function(ins){
+        var abaixo = ins.quantidade_atual < ins.quantidade_minima;
+        return '<tr>'
+          +'<td style="font-weight:700;">'+ins.nome+'</td>'
+          +'<td>'+ins.unidade+'</td>'
+          +'<td style="font-weight:800;color:'+(abaixo?'var(--red)':'var(--green)')+';">'+ins.quantidade_atual+' '+ins.unidade+'</td>'
+          +'<td>'+ins.quantidade_minima+' '+ins.unidade+'</td>'
+          +'<td><span class="badge '+(abaixo?'br':'bg')+'">'+(abaixo?'⚠️ Baixo':'✅ OK')+'</span></td>'
+          +'<td style="display:flex;gap:4px;">'
+          +'<button class="btn btn-g btn-sm" data-id="'+ins.id+'" onclick="modalMovimentoInsumo(this.dataset.id)">📥 Entrada</button>'
+          +'<button class="btn btn-r btn-sm" data-id="'+ins.id+'" onclick="modalSaidaInsumo(this.dataset.id)">📤 Saída</button>'
+          +'<button class="btn btn-s btn-sm" data-id="'+ins.id+'" onclick="verHistoricoInsumo(this.dataset.id)">📋</button>'
+          +'<button class="btn btn-r btn-sm" data-id="'+ins.id+'" onclick="delInsumo(this.dataset.id)"><i data-lucide="trash-2" style="width:11px;height:11px;"></i></button>'
+          +'</td></tr>';
+      }).join('')
+      +'</tbody></table></div>')
+    +'</div>';
+  lucide.createIcons();
+}
+
+async function addInsumo() {
+  var nome = (document.getElementById('ins-nome')||{}).value||'';
+  var uni  = (document.getElementById('ins-uni')||{}).value||'saco';
+  var qtd  = parseFloat((document.getElementById('ins-qtd')||{}).value)||0;
+  var min  = parseFloat((document.getElementById('ins-min')||{}).value)||0;
+  var obs  = (document.getElementById('ins-obs')||{}).value||'';
+  if(!nome) return toast('Informe o nome do insumo','err');
+  var res = await POST('/api/insumos', {id:uid(),nome,unidade:uni,quantidade_atual:qtd,quantidade_minima:min,obs});
+  if(res){ DB.insumos.unshift(res); toast('✅ Insumo cadastrado!'); renderInsumos(); }
+}
+
+async function delInsumo(id) {
+  if(!confirm('Excluir este insumo?')) return;
+  await DEL('/api/insumos/'+id);
+  DB.insumos = DB.insumos.filter(function(x){return x.id!==id;});
+  toast('Insumo excluído'); renderInsumos();
+}
+
+function modalMovimentoInsumo(id) {
+  var ins = (DB.insumos||[]).find(function(x){return x.id===id;});
+  if(!ins) return;
+  modal('<div class="section-title">📥 Entrada de Insumo — '+ins.nome+'</div>'
+    +'<div style="margin-bottom:10px;padding:10px;background:#0d1320;border-radius:8px;">'
+    +'<span style="font-size:11px;color:var(--muted);">Estoque atual: </span>'
+    +'<strong style="font-size:14px;color:var(--green);">'+ins.quantidade_atual+' '+ins.unidade+'</strong>'
+    +'</div>'
+    +'<div style="margin-bottom:8px;"><label class="lbl">Quantidade *</label>'
+    +'<input class="inp" id="mov-qtd" type="number" step="0.01" placeholder="0"></div>'
+    +'<div style="margin-bottom:12px;"><label class="lbl">Motivo / Obs</label>'
+    +'<input class="inp" id="mov-motivo" placeholder="Ex: Compra fornecedor X"></div>'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button class="btn btn-g" data-id="'+id+'" onclick="confirmarMovInsumo(this.dataset.id,\'entrada\')">✅ Confirmar Entrada</button>'
+    +'<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+    +'</div>');
+}
+
+function modalSaidaInsumo(id) {
+  var ins = (DB.insumos||[]).find(function(x){return x.id===id;});
+  if(!ins) return;
+  modal('<div class="section-title">📤 Saída de Insumo — '+ins.nome+'</div>'
+    +'<div style="margin-bottom:10px;padding:10px;background:#0d1320;border-radius:8px;">'
+    +'<span style="font-size:11px;color:var(--muted);">Estoque atual: </span>'
+    +'<strong style="font-size:14px;color:var(--accent);">'+ins.quantidade_atual+' '+ins.unidade+'</strong>'
+    +'</div>'
+    +'<div style="margin-bottom:8px;"><label class="lbl">Quantidade *</label>'
+    +'<input class="inp" id="mov-qtd" type="number" step="0.01" placeholder="0"></div>'
+    +'<div style="margin-bottom:12px;"><label class="lbl">Motivo / Obs</label>'
+    +'<input class="inp" id="mov-motivo" placeholder="Ex: Uso na embalagem lote X"></div>'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button class="btn btn-r" data-id="'+id+'" onclick="confirmarMovInsumo(this.dataset.id,\'saida\')">📤 Confirmar Saída</button>'
+    +'<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+    +'</div>');
+}
+
+async function confirmarMovInsumo(id, tipo) {
+  var ins = (DB.insumos||[]).find(function(x){return x.id===id;});
+  if(!ins) return;
+  var qtd    = parseFloat((document.getElementById('mov-qtd')||{}).value)||0;
+  var motivo = (document.getElementById('mov-motivo')||{}).value||'';
+  if(qtd<=0) return toast('Informe a quantidade','err');
+  if(tipo==='saida' && qtd > ins.quantidade_atual) return toast('Quantidade maior que o estoque!','err');
+  var novoEst = tipo==='entrada' ? ins.quantidade_atual+qtd : ins.quantidade_atual-qtd;
+  await PUT('/api/insumos/'+id, {quantidade_atual: novoEst});
+  ins.quantidade_atual = novoEst;
+  await POST('/api/movimentos_insumo', {id:uid(),insumo_id:id,tipo,quantidade:qtd,motivo,data:today()});
+  closeModal();
+  var abaixo = novoEst < ins.quantidade_minima;
+  toast((tipo==='entrada'?'✅ Entrada':'📤 Saída')+' de '+qtd+' '+ins.unidade+' registrada!'+(abaixo?' ⚠️ Abaixo do mínimo!':''));
+  await loadAllData();
+  renderInsumos();
+}
+
+function verHistoricoInsumo(id) {
+  var ins = (DB.insumos||[]).find(function(x){return x.id===id;});
+  if(!ins) return;
+  var hist = (DB.movimentos_insumo||[]).filter(function(m){return m.insumo_id===id;})
+    .sort(function(a,b){return (b.criado||'').localeCompare(a.criado||'');});
+  modal('<div class="section-title">📋 Histórico — '+ins.nome+'</div>'
+    +'<div style="padding:8px;background:#0d1320;border-radius:8px;margin-bottom:12px;">'
+    +'Estoque atual: <strong style="color:var(--green);">'+ins.quantidade_atual+' '+ins.unidade+'</strong>'
+    +' | Mínimo: <strong>'+ins.quantidade_minima+' '+ins.unidade+'</strong>'
+    +'</div>'
+    +(hist.length===0?'<div class="empty">Nenhum movimento</div>':
+      '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Data</th><th>Tipo</th><th>Qtd</th><th>Motivo</th></tr></thead><tbody>'
+      +hist.map(function(m){
+        return '<tr><td>'+fmtDate(m.data||m.criado)+'</td>'
+          +'<td><span class="badge '+(m.tipo==='entrada'?'bg':'bo')+'">'+(m.tipo==='entrada'?'📥 Entrada':'📤 Saída')+'</span></td>'
+          +'<td style="font-weight:700;color:'+(m.tipo==='entrada'?'var(--green)':'var(--accent)')+'">'+(m.tipo==='entrada'?'+':'-')+m.quantidade+' '+ins.unidade+'</td>'
+          +'<td style="font-size:10px;">'+(m.motivo||'—')+'</td>'
+          +'</tr>';
+      }).join('')
+      +'</tbody></table></div>')
+    +'<div style="margin-top:10px;"><button class="btn btn-s" onclick="closeModal()">Fechar</button></div>');
 }
 
 </script>
