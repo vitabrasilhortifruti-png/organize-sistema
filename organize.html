@@ -4622,16 +4622,17 @@ function renderCaixasFiltrado() {
     .sort(function(a,b){return b.data.localeCompare(a.data);});
 
   // Saldo por cliente
+  // saída = cliente deve, retorno = quita dívida
   var saldos = {};
-  (DB.retornos_caixa||[]).forEach(function(r){
-    var k=r.cliente_id+'|'+(r.marca||'');
-    if(!saldos[k]) saldos[k]={cli:r.cliente_id,marca:r.marca||'',cx:0,pal:0};
-    saldos[k].cx+=(r.quantidade||0); saldos[k].pal+=(r.paletes||0);
-  });
   (DB.saidas_caixa||[]).forEach(function(s){
     var k=s.cliente_id+'|'+(s.marca||'');
     if(!saldos[k]) saldos[k]={cli:s.cliente_id,marca:s.marca||'',cx:0,pal:0};
-    saldos[k].cx-=(s.quantidade||0); saldos[k].pal-=(s.paletes||0);
+    saldos[k].cx+=(s.quantidade||0); saldos[k].pal+=(s.paletes||0);
+  });
+  (DB.retornos_caixa||[]).forEach(function(r){
+    var k=r.cliente_id+'|'+(r.marca||'');
+    if(!saldos[k]) saldos[k]={cli:r.cliente_id,marca:r.marca||'',cx:0,pal:0};
+    saldos[k].cx-=(r.quantidade||0); saldos[k].pal-=(r.paletes||0);
   });
 
   var el=document.getElementById('cx-tabela');
@@ -4640,10 +4641,14 @@ function renderCaixasFiltrado() {
   var saldoHtml='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">';
   Object.values(saldos).filter(function(s){return !cliId||s.cli===cliId;}).forEach(function(s){
     var cli=DB.clientes.find(function(c){return c.id===s.cli;}); if(!cli) return;
-    var cor=s.cx>=0?'var(--green)':'var(--red)';
+    // cx>0 = cliente deve (laranja), cx=0 = quitado, cx<0 = crédito (verde)
+    var cor = s.cx>0?'var(--accent)':s.cx<0?'var(--green)':'var(--sub)';
+    var situLabel = s.cx>0?'⚠️ Deve '+s.cx+' cx':s.cx<0?'✅ Crédito '+Math.abs(s.cx)+' cx':'✅ Quitado';
     saldoHtml+='<div style="background:#0d1320;border-radius:8px;padding:8px 12px;border-left:3px solid '+cor+';">'
       +'<div style="font-size:10px;color:var(--muted);">'+cli.nome+(s.marca?' · '+s.marca:'')+'</div>'
-      +'<div style="font-size:13px;font-weight:800;color:'+cor+';">'+s.cx+' cx'+(s.pal?' · '+s.pal+' pal':'')+'</div></div>';
+      +'<div style="font-size:13px;font-weight:800;color:'+cor+';">'+situLabel+'</div>'
+      +(s.pal?'<div style="font-size:9px;color:var(--muted);">'+fmtPaletes(Math.abs(s.cx))+' pal</div>':'')
+      +'</div>';
   });
   saldoHtml+='</div>';
 
@@ -4721,21 +4726,22 @@ function imprimirRelatorioCaixas() {
 
   // Calculate saldo per client (ALL data, not filtered by period)
   var saldosPorCli = {};
-  (DB.retornos_caixa||[]).forEach(function(r){
-    if(cliId && r.cliente_id!==cliId) return;
-    if(marca && r.marca!==marca) return;
-    var k = r.cliente_id;
-    if(!saldosPorCli[k]) saldosPorCli[k] = {cx:0, pal:0};
-    saldosPorCli[k].cx  += r.quantidade||0;
-    saldosPorCli[k].pal += r.paletes||0;
-  });
+  // Saldo devedor: saída = deve, retorno = quita
   (DB.saidas_caixa||[]).forEach(function(s){
     if(cliId && s.cliente_id!==cliId) return;
     if(marca && s.marca!==marca) return;
     var k = s.cliente_id;
     if(!saldosPorCli[k]) saldosPorCli[k] = {cx:0, pal:0};
-    saldosPorCli[k].cx  -= s.quantidade||0;
-    saldosPorCli[k].pal -= s.paletes||0;
+    saldosPorCli[k].cx  += s.quantidade||0;
+    saldosPorCli[k].pal += s.paletes||0;
+  });
+  (DB.retornos_caixa||[]).forEach(function(r){
+    if(cliId && r.cliente_id!==cliId) return;
+    if(marca && r.marca!==marca) return;
+    var k = r.cliente_id;
+    if(!saldosPorCli[k]) saldosPorCli[k] = {cx:0, pal:0};
+    saldosPorCli[k].cx  -= r.quantidade||0;
+    saldosPorCli[k].pal -= r.paletes||0;
   });
 
   // Filtered history for period
@@ -4766,13 +4772,15 @@ function imprimirRelatorioCaixas() {
   var saldoRows = Object.keys(saldosPorCli).map(function(cid){
     var cli = DB.clientes.find(function(c){return c.id===cid;})||{nome:'—'};
     var s = saldosPorCli[cid];
-    var cor = s.cx >= 0 ? '#10b981' : '#ef4444';
-    var icon = s.cx >= 0 ? '✅' : '⚠️';
-    return '<tr style="background:'+(s.cx<0?'#fff5f5':'#f0fdf4')+';">'
-      +'<td style="font-weight:700;">'+cli.nome+'</td>'
-      +'<td style="font-weight:800;color:'+cor+';font-size:14px;">'+icon+' '+s.cx+' cx</td>'
-      +'<td style="color:'+cor+';">'+s.pal+' pal</td>'
-      +'<td style="color:'+cor+';font-weight:700;">'+(s.cx>=0?'✅ Cliente deve':'⚠️ Nós devemos')+'</td>'
+    // cx > 0 = cliente deve, cx = 0 = quitado, cx < 0 = crédito nosso
+    var cor = s.cx > 0 ? '#f97316' : s.cx < 0 ? '#10b981' : '#888';
+    var situacao = s.cx > 0 ? '⚠️ Cliente deve' : s.cx < 0 ? '✅ Crédito do cliente' : '✅ Quitado';
+    var bg = s.cx > 0 ? '#fff7ed' : s.cx < 0 ? '#f0fdf4' : '#f9f9f9';
+    return '<tr style="background:'+bg+';">'
+      +'<td style="padding:6px 8px;font-weight:700;">'+cli.nome+'</td>'
+      +'<td style="padding:6px 8px;font-weight:800;color:'+cor+';font-size:14px;">'+Math.abs(s.cx)+' cx</td>'
+      +'<td style="padding:6px 8px;color:'+cor+';">'+fmtPaletes(Math.abs(s.cx))+'</td>'
+      +'<td style="padding:6px 8px;color:'+cor+';font-weight:700;">'+situacao+'</td>'
       +'</tr>';
   }).join('');
 
