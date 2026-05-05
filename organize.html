@@ -1066,11 +1066,11 @@ function renderEntrada() {
       <input class="inp" id="ent-f-fim" type="date" style="max-width:140px;" oninput="filtrarEntradas()">
       <select class="inp" id="ent-f-forn" style="max-width:160px;" onchange="filtrarEntradas()">
         <option value="">Todos fornecedores</option>
-        \${DB.fornecedores.map(f=>\`<option value="\${f.id}">\${f.nome}</option>\`).join('')}
+        ${DB.fornecedores.map(f=>`<option value="${f.id}">${f.nome}</option>`).join('')}
       </select>
       <select class="inp" id="ent-f-fruta" style="max-width:130px;" onchange="filtrarEntradas()">
         <option value="">Todas frutas</option>
-        \${[...new Set(DB.entradas.map(e=>e.fruta))].map(f=>\`<option>\${f}</option>\`).join('')}
+        ${[...new Set(DB.entradas.map(e=>e.fruta))].map(f=>`<option>${f}</option>`).join('')}
       </select>
       <button class="btn btn-s btn-sm" onclick="limparFiltrosEntradas()">✕ Limpar</button>
       <button class="btn btn-p btn-sm" onclick="imprimirRelatorioEntradas()">🖨️ Relatório</button>
@@ -4713,47 +4713,130 @@ async function delCaixa(id, tipo) {
 }
 
 function imprimirRelatorioCaixas() {
-  var cliId=(document.getElementById('cx-f-cli')||{}).value||'';
-  var marca=(document.getElementById('cx-f-marca')||{}).value||'';
-  var ini=(document.getElementById('cx-f-ini')||{}).value||'';
-  var fim=(document.getElementById('cx-f-fim')||{}).value||'';
-  var retornos=(DB.retornos_caixa||[]).filter(function(r){
-    if(cliId&&r.cliente_id!==cliId)return false;
-    if(marca&&r.marca!==marca)return false;
-    if(ini&&r.data<ini)return false;
-    if(fim&&r.data>fim)return false;
+  var cliId = (document.getElementById('cx-f-cli')||{}).value||'';
+  var marca = (document.getElementById('cx-f-marca')||{}).value||'';
+  var ini   = (document.getElementById('cx-f-ini')||{}).value||'';
+  var fim   = (document.getElementById('cx-f-fim')||{}).value||'';
+  var emp   = DB.empresa || {};
+
+  // Calculate saldo per client (ALL data, not filtered by period)
+  var saldosPorCli = {};
+  (DB.retornos_caixa||[]).forEach(function(r){
+    if(cliId && r.cliente_id!==cliId) return;
+    if(marca && r.marca!==marca) return;
+    var k = r.cliente_id;
+    if(!saldosPorCli[k]) saldosPorCli[k] = {cx:0, pal:0};
+    saldosPorCli[k].cx  += r.quantidade||0;
+    saldosPorCli[k].pal += r.paletes||0;
+  });
+  (DB.saidas_caixa||[]).forEach(function(s){
+    if(cliId && s.cliente_id!==cliId) return;
+    if(marca && s.marca!==marca) return;
+    var k = s.cliente_id;
+    if(!saldosPorCli[k]) saldosPorCli[k] = {cx:0, pal:0};
+    saldosPorCli[k].cx  -= s.quantidade||0;
+    saldosPorCli[k].pal -= s.paletes||0;
+  });
+
+  // Filtered history for period
+  var retornos = (DB.retornos_caixa||[]).filter(function(r){
+    if(cliId && r.cliente_id!==cliId) return false;
+    if(marca && r.marca!==marca) return false;
+    if(ini && r.data<ini) return false;
+    if(fim && r.data>fim) return false;
     return true;
   });
-  var saidas=(DB.saidas_caixa||[]).filter(function(s){
-    if(cliId&&s.cliente_id!==cliId)return false;
-    if(marca&&s.marca!==marca)return false;
-    if(ini&&s.data<ini)return false;
-    if(fim&&s.data>fim)return false;
+  var saidas = (DB.saidas_caixa||[]).filter(function(s){
+    if(cliId && s.cliente_id!==cliId) return false;
+    if(marca && s.marca!==marca) return false;
+    if(ini && s.data<ini) return false;
+    if(fim && s.data>fim) return false;
     return true;
   });
-  var totR=retornos.reduce(function(s,r){return s+(r.quantidade||0);},0);
-  var totS=saidas.reduce(function(s,r){return s+(r.quantidade||0);},0);
-  var saldo=totR-totS;
-  var todos=retornos.map(function(r){return Object.assign({},r,{tipo:'retorno'});})
+
+  var totR = retornos.reduce(function(s,r){return s+(r.quantidade||0);},0);
+  var totS = saidas.reduce(function(s,r){return s+(r.quantidade||0);},0);
+  var saldoGeral = Object.values(saldosPorCli).reduce(function(s,v){return s+v.cx;},0);
+
+  var todos = retornos.map(function(r){return Object.assign({},r,{tipo:'retorno'});})
     .concat(saidas.map(function(s){return Object.assign({},s,{tipo:'saida'});}))
     .sort(function(a,b){return b.data.localeCompare(a.data);});
-  var corpo='<div class="pt">📦 Relatório de Caixas'+(ini||fim?' ('+fmtDate(ini)+' a '+fmtDate(fim)+')':'')+'</div>'
+
+  // Saldo cards per client
+  var saldoRows = Object.keys(saldosPorCli).map(function(cid){
+    var cli = DB.clientes.find(function(c){return c.id===cid;})||{nome:'—'};
+    var s = saldosPorCli[cid];
+    var cor = s.cx >= 0 ? '#10b981' : '#ef4444';
+    var icon = s.cx >= 0 ? '✅' : '⚠️';
+    return '<tr style="background:'+(s.cx<0?'#fff5f5':'#f0fdf4')+';">'
+      +'<td style="font-weight:700;">'+cli.nome+'</td>'
+      +'<td style="font-weight:800;color:'+cor+';font-size:14px;">'+icon+' '+s.cx+' cx</td>'
+      +'<td style="color:'+cor+';">'+s.pal+' pal</td>'
+      +'<td style="color:'+cor+';font-weight:700;">'+(s.cx>=0?'✅ Cliente deve':'⚠️ Nós devemos')+'</td>'
+      +'</tr>';
+  }).join('');
+
+  var corpo = '<div style="font-size:18px;font-weight:800;margin-bottom:12px;">📦 Relatório de Caixas'
+    +(ini||fim?' — '+fmtDate(ini)+' a '+fmtDate(fim):'')+'</div>'
+
+    // SALDO POR CLIENTE
+    +'<div style="margin-bottom:14px;">'
+    +'<div style="font-size:13px;font-weight:800;color:#333;margin-bottom:6px;">📊 SALDO ATUAL POR CLIENTE</div>'
+    +'<table style="width:100%;border-collapse:collapse;margin-bottom:0;">'
+    +'<thead><tr style="background:#f97316;color:#fff;">'
+    +'<th style="padding:6px 8px;text-align:left;">Cliente</th>'
+    +'<th style="padding:6px 8px;text-align:left;">Saldo Caixas</th>'
+    +'<th style="padding:6px 8px;text-align:left;">Paletes</th>'
+    +'<th style="padding:6px 8px;text-align:left;">Situação</th>'
+    +'</tr></thead><tbody>'
+    + saldoRows
+    +'<tr style="background:#f3f4f6;font-weight:800;">'
+    +'<td style="padding:6px 8px;">TOTAL GERAL</td>'
+    +'<td style="padding:6px 8px;font-size:14px;color:'+(saldoGeral>=0?'#10b981':'#ef4444')+';">'+saldoGeral+' cx</td>'
+    +'<td colspan="2"></td></tr>'
+    +'</tbody></table></div>'
+
+    // RESUMO PERÍODO
     +'<div style="display:flex;gap:10px;margin-bottom:14px;">'
-    +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Retornos</div><div style="font-size:16px;font-weight:800;color:#10b981;">+'+totR+'</div></div>'
-    +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Saídas</div><div style="font-size:16px;font-weight:800;color:#f97316;">-'+totS+'</div></div>'
-    +'<div style="flex:1;border:1px solid #eee;border-radius:4px;padding:8px;text-align:center;"><div class="lbl">Saldo</div><div style="font-size:16px;font-weight:800;color:'+(saldo>=0?'#10b981':'#ef4444')+';">'+saldo+'</div></div>'
+    +'<div style="flex:1;border:1px solid #eee;border-radius:6px;padding:10px;text-align:center;">'
+    +'<div style="font-size:10px;color:#888;text-transform:uppercase;">Retornos no Período</div>'
+    +'<div style="font-size:20px;font-weight:800;color:#10b981;">+'+totR+' cx</div></div>'
+    +'<div style="flex:1;border:1px solid #eee;border-radius:6px;padding:10px;text-align:center;">'
+    +'<div style="font-size:10px;color:#888;text-transform:uppercase;">Saídas no Período</div>'
+    +'<div style="font-size:20px;font-weight:800;color:#f97316;">-'+totS+' cx</div></div>'
+    +'<div style="flex:1;border:1px solid #eee;border-radius:6px;padding:10px;text-align:center;">'
+    +'<div style="font-size:10px;color:#888;text-transform:uppercase;">Saldo Geral</div>'
+    +'<div style="font-size:20px;font-weight:800;color:'+(saldoGeral>=0?'#10b981':'#ef4444')+';">'+saldoGeral+' cx</div></div>'
     +'</div>'
-    +'<table><thead><tr><th>Data</th><th>Tipo</th><th>Cliente</th><th>Marca</th><th>Caixas</th><th>Paletes</th><th>Obs</th></tr></thead><tbody>'
-    +todos.map(function(r){
-      var cli=DB.clientes.find(function(c){return c.id===r.cliente_id;});
-      return '<tr><td>'+fmtDate(r.data)+'</td>'
-        +'<td style="font-weight:700;color:'+(r.tipo==='retorno'?'#10b981':'#f97316')+'">'+(r.tipo==='retorno'?'⬇️ Retorno':'⬆️ Saída')+'</td>'
-        +'<td>'+(cli?cli.nome:'-')+'</td>'
-        +'<td>'+(r.marca||'-')+'</td>'
-        +'<td>'+(r.tipo==='retorno'?'+':'-')+(r.quantidade||0)+'</td>'
-        +'<td>'+(r.paletes||0)+'</td>'
-        +'<td>'+(r.obs||'-')+'</td></tr>';
-    }).join('')+'</tbody></table>';
+
+    // HISTÓRICO
+    +(todos.length===0 ? '<div style="color:#888;text-align:center;padding:20px;">Nenhum lançamento no período</div>' :
+      '<div style="font-size:12px;font-weight:700;margin-bottom:6px;color:#333;">📋 HISTÓRICO DE LANÇAMENTOS</div>'
+      +'<table style="width:100%;border-collapse:collapse;">'
+      +'<thead><tr style="background:#1a2e1b;color:#fff;">'
+      +'<th style="padding:5px 7px;text-align:left;">Data</th>'
+      +'<th style="padding:5px 7px;text-align:left;">Tipo</th>'
+      +'<th style="padding:5px 7px;text-align:left;">Cliente</th>'
+      +'<th style="padding:5px 7px;text-align:left;">Marca</th>'
+      +'<th style="padding:5px 7px;text-align:center;">Caixas</th>'
+      +'<th style="padding:5px 7px;text-align:center;">Paletes</th>'
+      +'<th style="padding:5px 7px;text-align:left;">Obs</th>'
+      +'</tr></thead><tbody>'
+      +todos.map(function(r,i){
+        var cli = DB.clientes.find(function(c){return c.id===r.cliente_id;})||{nome:'—'};
+        var isR = r.tipo==='retorno';
+        return '<tr style="background:'+(i%2===0?'#fff':'#f9f9f9')+';">'
+          +'<td style="padding:5px 7px;">'+fmtDate(r.data)+'</td>'
+          +'<td style="padding:5px 7px;font-weight:700;color:'+(isR?'#10b981':'#f97316')+'">'+(isR?'⬇️ Retorno':'⬆️ Saída')+'</td>'
+          +'<td style="padding:5px 7px;font-weight:600;">'+cli.nome+'</td>'
+          +'<td style="padding:5px 7px;">'+(r.marca||'—')+'</td>'
+          +'<td style="padding:5px 7px;text-align:center;font-weight:700;color:'+(isR?'#10b981':'#f97316')+'">'+(isR?'+':'-')+(r.quantidade||0)+'</td>'
+          +'<td style="padding:5px 7px;text-align:center;">'+(r.paletes||0)+'</td>'
+          +'<td style="padding:5px 7px;font-size:10px;">'+(r.obs||'—')+'</td>'
+          +'</tr>';
+      }).join('')
+      +'</tbody></table>');
+
   abrirJanelaImpressao('Relatório de Caixas', corpo);
 }
 
